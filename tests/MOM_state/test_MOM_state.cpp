@@ -1,5 +1,5 @@
 // Sanity tests for the prognostic state and its initialization
-// (src/core/MOM_state.cpp, src/initialization/MOM_state_initialization.cpp):
+// (src/types/MOM_state.cpp, src/initialization/MOM_state_initialization.cpp):
 // staggering, the uniform thickness column, and rejection of unsupported
 // configurations.
 //
@@ -13,8 +13,12 @@
 #include "MOM_domain_infra.h"
 #include "MOM_infra.h"
 #include "MOM_logger.h"
+#include "MOM_grid.h"
+#include "MOM_grid_initialize.h"
+#include "MOM_shared_initialization.h"
 #include "MOM_state.h"
 #include "MOM_state_initialization.h"
+#include "MOM_vertical_grid.h"
 
 namespace {
 
@@ -34,11 +38,22 @@ MOM::Domain make_domain() {
                       .ni_halo = HALO, .nj_halo = HALO, .reentrant_x = false});
 }
 
-// A flat bottom at a chosen depth, so the expected column is exact.
-amrex::MultiFab flat_bathymetry(const MOM::Domain &domain, const double depth) {
-  amrex::MultiFab D = domain.make_field(MOM::Stagger::Cell, 1, 1);
-  D.setVal(depth);
-  return D;
+// A grid with a flat bottom at a chosen depth, so the expected column is
+// exact. max_depth is the vertical extent the layers are distributed over and
+// is independent of the bathymetry.
+MOM::Grid flat_grid(const MOM::Domain &domain, const double depth) {
+  const MOM::GridSpec spec = {.south_lat = 30.0, .len_lat = 20.0,
+                              .west_lon = 0.0, .len_lon = 22.0,
+                              .rad_earth = 6.378e6, .omega = 7.2921e-5};
+  const MOM::TopoSpec topo = {.max_depth = depth, .min_depth = 0.0};
+  MOM::GridFields fields = MOM::spherical_grid_fields(domain, spec);
+  fields.CoriolisBu = MOM::planetary_rotation(domain, spec, fields.geoLatBu);
+  fields.bathyT = MOM::named_topography(domain, "flat", spec, topo,
+                                        fields.geoLonT, fields.geoLatT);
+  fields.max_depth = MAX_DEPTH;
+  MOM::initialize_masks(domain, topo, fields.bathyT, fields);
+  MOM::set_derived_metrics(domain, fields);
+  return MOM::Grid(std::move(fields));
 }
 
 } // namespace
@@ -50,10 +65,9 @@ TEST(State, UniformThicknessOnADeepFlatBottom) {
   const MOM::Domain domain = make_domain();
   MOM::RuntimeParams params(param_file("MOM_input_test").string());
 
-  const double depth = MAX_DEPTH;
-  MOM::StateFields fields = MOM::initialize_state(
-      domain, {.nk = NK, .max_depth = MAX_DEPTH, .angstrom = ANGSTROM},
-      flat_bathymetry(domain, depth), params);
+  const MOM::Grid grid = flat_grid(domain, MAX_DEPTH);
+  const MOM::VerticalGrid vgrid(params);
+  MOM::StateFields fields = MOM::initialize_state(domain, grid, vgrid, params);
   const MOM::State state(std::move(fields));
 
   // Each field sits at its C-grid point type and carries nk layers.
@@ -79,9 +93,9 @@ TEST(State, UniformThicknessCollapsesShallowColumns) {
   MOM::RuntimeParams params(param_file("MOM_input_test").string());
 
   const double depth = 300.0;  // shallower than MAX_DEPTH/nk = 1000
-  MOM::StateFields fields = MOM::initialize_state(
-      domain, {.nk = NK, .max_depth = MAX_DEPTH, .angstrom = ANGSTROM},
-      flat_bathymetry(domain, depth), params);
+  const MOM::Grid grid = flat_grid(domain, depth);
+  const MOM::VerticalGrid vgrid(params);
+  MOM::StateFields fields = MOM::initialize_state(domain, grid, vgrid, params);
   const MOM::State state(std::move(fields));
 
   EXPECT_DOUBLE_EQ(state.h().min(0), ANGSTROM);
@@ -93,9 +107,9 @@ TEST(State, UnsupportedThicknessConfigIsFatal) {
   const MOM::Domain domain = make_domain();
   MOM::RuntimeParams params(param_file("MOM_input_bad_config").string());
 
-  EXPECT_THROW(MOM::initialize_state(
-                   domain, {.nk = NK, .max_depth = MAX_DEPTH, .angstrom = ANGSTROM},
-                   flat_bathymetry(domain, MAX_DEPTH), params),
+  const MOM::Grid grid = flat_grid(domain, MAX_DEPTH);
+  const MOM::VerticalGrid vgrid(params);
+  EXPECT_THROW(MOM::initialize_state(domain, grid, vgrid, params),
                MOM::logger::FatalError);
 }
 

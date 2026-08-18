@@ -10,6 +10,6 @@ target_include_directories(MOM_src_diagnostics
 
 target_link_libraries(MOM_src_diagnostics
   PUBLIC
-    MOM_src_core
+    MOM_src_types
 )
 add_amrex_to_protomom_target(MOM_src_diagnostics)

@@ -16,12 +16,12 @@ namespace {
 // sequential in k, so this launches one thread per column and loops over k
 // inside it rather than one thread per cell.
 void initialize_thickness_uniform(amrex::MultiFab &h, const Domain &domain,
-                                  const StateSpec &spec,
-                                  const amrex::MultiFab &bathyT) {
+                                  const Grid &grid, const VerticalGrid &vgrid) {
 
-  const int nk = spec.nk;
-  const amrex::Real max_depth = spec.max_depth;
-  const amrex::Real angstrom = spec.angstrom;
+  const int nk = vgrid.nk();
+  const amrex::Real max_depth = grid.max_depth();
+  const amrex::Real angstrom = vgrid.angstrom();
+  const amrex::MultiFab &bathyT = grid.bathyT();
 
   if (!(max_depth > 0.0)) {
     logger::fatal("initialize_thickness_uniform: MAXIMUM_DEPTH is not set.");
@@ -59,21 +59,21 @@ void initialize_thickness_uniform(amrex::MultiFab &h, const Domain &domain,
 
 } // namespace
 
-StateFields initialize_state(const Domain &domain, const StateSpec &spec,
-                             const amrex::MultiFab &bathyT, RuntimeParams &params) {
+StateFields initialize_state(const Domain &domain, const Grid &grid,
+                             const VerticalGrid &vgrid, RuntimeParams &params) {
 
   params.doc_module("MOM_state_initialization", "");
 
   StateFields fields;
-  fields.h = domain.make_field(Stagger::Cell, spec.nk, 1);
-  fields.u = domain.make_field(Stagger::XFace, spec.nk, 1);
-  fields.v = domain.make_field(Stagger::YFace, spec.nk, 1);
+  fields.h = domain.make_field(Stagger::Cell, vgrid.nk(), 1);
+  fields.u = domain.make_field(Stagger::XFace, vgrid.nk(), 1);
+  fields.v = domain.make_field(Stagger::YFace, vgrid.nk(), 1);
 
   // MOM6 allocates h at the Angstrom and u and v at zero. The fill value
   // matters: the thickness configurations only write the computational
   // domain, so it is what the halo outside the global domain keeps, and the
   // pressure gradient at the boundary faces is computed from it.
-  fields.h.setVal(spec.angstrom);
+  fields.h.setVal(vgrid.angstrom());
   fields.u.setVal(0.0);
   fields.v.setVal(0.0);
 
@@ -93,7 +93,7 @@ StateFields initialize_state(const Domain &domain, const StateSpec &spec,
                       "\t USER - call a user modified routine."});
 
   if (h_config == "uniform") {
-    initialize_thickness_uniform(fields.h, domain, spec, bathyT);
+    initialize_thickness_uniform(fields.h, domain, grid, vgrid);
   } else {
     // defer: the remaining THICKNESS_CONFIG options.
     logger::fatal("initialize_state: THICKNESS_CONFIG \"", h_config,

@@ -46,6 +46,7 @@ add_subdirectory("${TIM_SOURCE_DIR}/tim/cpp" "${CMAKE_BINARY_DIR}/extern/TIM/tim
 add_subdirectory(src/framework)
 add_subdirectory(src/types)
 add_subdirectory(src/initialization)
+add_subdirectory(src/parameterizations)
 add_subdirectory(src/core)
 add_subdirectory(src/diagnostics)
 add_subdirectory(config_src/drivers/solo_driver)

@@ -1,4 +1,4 @@
-// Unit tests for the VerticalGrid class (src/core/MOM_vertical_grid.cpp),
+// Unit tests for the VerticalGrid class (src/types/MOM_vertical_grid.cpp),
 // which is constructed from an injected RuntimeParams object. The vertical
 // grid is AMReX-free, so no infra (AMReX) bring-up is needed.
 

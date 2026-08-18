@@ -12,11 +12,7 @@ Model::Model(RuntimeParams &params)
     domain_(make_domain(params)),
     grid_(make_grid(domain_, params)),
     vgrid_(params),
-    state_(initialize_state(domain_,
-                            {.nk = vgrid_.nk(),
-                             .max_depth = grid_.max_depth(),
-                             .angstrom = vgrid_.angstrom()},
-                            grid_.bathyT(), params)) {
+    state_(initialize_state(domain_, grid_, vgrid_, params)) {
 
   // Initialization phases, in the order of MOM6's initialize_MOM:
   initialize_dynamics(params);

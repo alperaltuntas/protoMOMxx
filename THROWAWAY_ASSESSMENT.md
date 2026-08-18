@@ -309,18 +309,38 @@ most stagger confusions into runtime failures instead of silent aliasing.
 
 ### What bent or broke
 
-**The per-directory library graph does not survive the dynamics.** The
-one-way `framework <- initialization <- core` graph held through PR 5. PR 7
-bent it: `src/initialization` cannot see `Grid` or `VerticalGrid`, so
-`initialize_state` takes a `StateSpec` of plain values instead. The dynamics
-broke it outright: `src/parameterizations` uses `MOM_grid`, and `src/core`'s
-stepper calls the parameterizations, so the two now share one CMake library.
-MOM6 has the same cycles and hides them behind a single link unit; protoMOMxx
-inherited the directory layout without inheriting that.
+**The per-directory library graph did not survive the dynamics, and has been
+fixed.** The one-way `framework <- initialization <- core` graph held through
+PR 5. PR 7 bent it: `src/initialization` could not see `Grid` or
+`VerticalGrid`, so `initialize_state` took a `StateSpec` of plain values
+copied out of them. The dynamics broke it outright: `src/parameterizations`
+uses `MOM_grid`, and `src/core`'s stepper calls the parameterizations, so the
+two shared one CMake library. MOM6 has the same cycles and hides them behind a
+single link unit; protoMOMxx had inherited the directory layout without
+inheriting that.
 
-The fix is to split the *types* -- `Grid`, `VerticalGrid`, `State`,
-`MechForcing` -- into a layer below both `src/initialization` and the
-dynamics, keeping their MOM6 file names. It is cheap now and expensive later.
+The fix, and the one place this document's recommendation has already been
+acted on, is a `src/types` layer below both: `Grid`, `VerticalGrid`, `State`,
+`MechForcing` and their construction precursors, with the MOM6 file names
+kept. The graph is now
+
+    infra <- framework <- types <- { initialization, parameterizations,
+                                     diagnostics } <- core
+
+with no cycles and nothing sharing a library to hide one. Three things fell
+out of it immediately: `StateSpec` is gone, and `initialize_state` takes the
+`Grid` and the `VerticalGrid` it always wanted; `src/parameterizations` is its
+own library; and `src/diagnostics` depends on the types rather than on the
+whole core. `MOM_loop_boxes.h` moved to `src/framework` on the way, since the
+parameterizations need it and it is a helper over `amrex::Box` with no model
+dependency.
+
+The cost is the one deviation from MOM6's directory layout in the branch:
+MOM6 keeps `MOM_grid.F90`, `MOM_verticalGrid.F90` and `MOM_forcing_type.F90`
+in its `src/core`. The file names are unchanged, so a MOM6 developer still
+recognizes them, and `src/types/README.md` states the rule for what belongs
+there. That is the right trade: the alternative is a directory layout that
+matches MOM6's and a link graph that cannot be expressed.
 
 **Two-dimensional work fields under a three-dimensional MFIter.** The only
 crash of the exercise, and it is instructive. `mfi.validbox()` taken from an
@@ -399,9 +419,10 @@ the exit path.
 To run the stock configuration (`SPLIT = True`, `ANALYTIC_FV_PGF = True`,
 biharmonic viscosity, `DT = 1200`), in dependency order:
 
-1. **Types layer split** -- `Grid`, `VerticalGrid`, `State`, `MechForcing`
-   below `src/initialization` and `src/parameterizations`. Small; do it first,
-   before more code is written against the current graph.
+1. ~~**Types layer split**~~ -- done: `src/types` holds `Grid`,
+   `VerticalGrid`, `State` and `MechForcing` below `src/initialization`,
+   `src/parameterizations` and `src/diagnostics`. It was as cheap as predicted
+   and it is now a precondition rather than a task.
 2. **Parity harness** -- `report_field` plus a script that diffs a protoMOMxx
    log against a MOM6 `DEBUG` log stage by stage, in CI. About 200 lines, and
    the diff script is another 60. This made the exercise tractable and belongs
@@ -442,7 +463,10 @@ is the schedule.
 **The prototype found the load-bearing walls the plan did not predict.** The
 PR pipeline expected the risk to be AMReX fit. The actual friction was the
 library dependency graph and the index-convention translation, neither of
-which appears in `DESIGN.md`. AMReX itself was the easy part.
+which appears in `DESIGN.md`. AMReX itself was the easy part. The graph one
+has since been fixed on the mainline branch and merged back here, which is the
+throwaway working as intended: the finding outlived the code that produced
+it.
 
 **A throwaway is only trustworthy if it refuses to guess.** The
 abort-on-deferred-branch policy is what made this safe. A prototype that runs
@@ -480,10 +504,11 @@ genuinely affordable, and small enough that the estimate for the full
 double-gyre -- dominated by the barotropic solver at three to five times this
 size -- is credible rather than a guess.
 
-**What to keep from the throwaway:** `MOM_loop_boxes.h`, `report_field` and
-its MOM6-compatible checksum, `MOM_coms` and `MOM_sum_output` (both faithful to
-MOM6 and both cheap to test), the `NBOXES` layout test, the contraction
-findings, and the inventory of live aborts. **What to throw away:** the kernels
+**What to keep from the throwaway:** the `src/types` layering, which is
+already back on `horGrid`; `MOM_loop_boxes.h`; `report_field` and its
+MOM6-compatible checksum; `MOM_coms` and `MOM_sum_output` (both faithful to
+MOM6 and both cheap to test); the `NBOXES` layout test; the contraction
+findings; and the inventory of live aborts. **What to throw away:** the kernels
 themselves. They should be re-derived on top of the units layer and the typed
 fields, not retrofitted -- retrofitting numerics is exactly what §6 warns
 against.
