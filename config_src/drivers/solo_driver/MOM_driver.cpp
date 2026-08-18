@@ -9,6 +9,7 @@
 
 #include "MOM.h"
 #include "MOM_clock.h"
+#include "MOM_debug_dump.h"
 #include "MOM_directories.h"
 #include "MOM_infra.h"
 #include "MOM_logger.h"
@@ -56,6 +57,27 @@ int main(int argc, char* argv[]) {
     MOM::MechForcing forces(model.domain());
 
     // defer: MOM_wave_interface_init(), data_override_init(), ice shelf hooks
+
+    // Parity scaffolding: with DEBUG set, dump the fixed fields so they can be
+    // diffed against legacy MOM6's ocean_geometry.nc. Retires with the I/O
+    // layer.
+    if (model.config().debug) {
+      MOM::debug::dump_field(model.grid().geoLatT(), "geoLatT");
+      MOM::debug::dump_field(model.grid().geoLonT(), "geoLonT");
+      MOM::debug::dump_field(model.grid().dxT(), "dxT");
+      MOM::debug::dump_field(model.grid().dyT(), "dyT");
+      MOM::debug::dump_field(model.grid().areaT(), "areaT");
+      MOM::debug::dump_field(model.grid().dxCu(), "dxCu");
+      MOM::debug::dump_field(model.grid().dyCu(), "dyCu");
+      MOM::debug::dump_field(model.grid().dxCv(), "dxCv");
+      MOM::debug::dump_field(model.grid().dyCv(), "dyCv");
+      MOM::debug::dump_field(model.grid().dxBu(), "dxBu");
+      MOM::debug::dump_field(model.grid().dyBu(), "dyBu");
+      MOM::debug::dump_field(model.grid().CoriolisBu(), "CoriolisBu");
+      MOM::debug::dump_field(model.grid().bathyT(), "bathyT");
+      MOM::debug::dump_field(model.grid().mask2dT(), "mask2dT");
+      MOM::debug::dump_field(model.state().h(), "h_init");
+    }
 
     MOM::logger::note("Starting the time loop: ", clock.end_time() / 86400.0,
                       " days, ", clock.steps_per_forcing(),
