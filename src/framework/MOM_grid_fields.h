@@ -28,6 +28,18 @@ struct GridSpec {
   amrex::Real omega = 7.2921e-5;    ///< The rotation rate of the Earth [T-1 ~> s-1].
 };
 
+/// @brief The construction specification of the bottom topography: the named
+/// analytic shape (TOPO_CONFIG) and the depths that bound and shape it. The
+/// masking depth of MOM6's MASKING_DEPTH is not carried: protoMOMxx only
+/// implements MOM6's default path, where MINIMUM_DEPTH is both the clamp and
+/// the land/sea threshold.
+struct TopoSpec {
+  amrex::Real max_depth = 0.0;        ///< The maximum depth of the ocean [Z ~> m].
+  amrex::Real min_depth = 0.0;        ///< The minimum depth of the ocean [Z ~> m].
+  amrex::Real edge_depth = 100.0;     ///< The depth at the edge of a named topography [Z ~> m].
+  amrex::Real expdecay = 400000.0;    ///< The decay scale of the sloping boundaries [L ~> m].
+};
+
 /// @brief The grid fields (the metrics at the four C-grid point types and the
 /// Coriolis parameter) and the geographic extents they were computed from.
 /// The analogue of MOM6's dyn_horgrid_type.
@@ -67,6 +79,14 @@ struct GridFields {
   amrex::MultiFab dyBu;      ///< Delta y at q points [L ~> m].
 
   amrex::MultiFab CoriolisBu;  ///< The Coriolis parameter at q points [T-1 ~> s-1].
+
+  amrex::Real max_depth = 0.0;  ///< The maximum depth of the ocean [Z ~> m].
+  amrex::MultiFab bathyT;    ///< The ocean bottom depth at h points, positive down [Z ~> m].
+
+  amrex::MultiFab mask2dT;   ///< 1 for ocean, 0 for land at h points [nondim].
+  amrex::MultiFab mask2dCu;  ///< 1 for ocean, 0 for land at u points [nondim].
+  amrex::MultiFab mask2dCv;  ///< 1 for ocean, 0 for land at v points [nondim].
+  amrex::MultiFab mask2dBu;  ///< 1 for ocean, 0 for land at q points [nondim].
 };
 
 } // namespace MOM

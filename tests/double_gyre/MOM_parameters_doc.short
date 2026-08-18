@@ -28,6 +28,22 @@ LENLAT = 20.0                   !   [degrees_N]
                                 ! The latitudinal length of the domain.
 LENLON = 22.0                   !   [degrees_E]
                                 ! The longitudinal length of the domain.
+TOPO_CONFIG = "spoon"           !
+                                ! This specifies how bathymetry is specified:
+                                !    file - read bathymetric information from the file
+                                !      specified by (TOPO_FILE).
+                                !    flat - flat bottom set to MAXIMUM_DEPTH.
+                                !    bowl - an analytically specified bowl-shaped basin
+                                !      ranging between MAXIMUM_DEPTH and MINIMUM_DEPTH.
+                                !    spoon - a similar shape to 'bowl', but with an vertical
+                                !      wall at the southern face.
+                                !    halfpipe - a zonally uniform channel with a half-sine
+                                !      profile in the meridional direction.
+                                !    USER - call a user modified routine.
+MINIMUM_DEPTH = 1.0             !   [m] default = 0.0
+                                ! The minimum depth of the ocean.
+MAXIMUM_DEPTH = 2000.0          !   [m]
+                                ! The maximum depth of the ocean.
 
 ! === module MOM_verticalGrid ===
                                 ! Parameters providing information about the vertical grid.

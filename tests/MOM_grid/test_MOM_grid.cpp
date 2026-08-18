@@ -7,6 +7,7 @@
 // which instantiates a MOM::Infra.
 
 #include <cmath>
+#include <string>
 #include <utility>
 #include <gtest/gtest.h>
 
@@ -32,13 +33,22 @@ constexpr double LEN_LON = 22.0;    // [degrees_E]
 constexpr double RAD_EARTH = 6.378e6;   // [m]
 constexpr double OMEGA = 7.2921e-5;     // [s-1]
 constexpr int HALO = 2;
+constexpr double MAX_DEPTH = 2000.0;    // [m]
+constexpr double MIN_DEPTH = 1.0;       // [m]
+constexpr double EDGE_DEPTH = 100.0;    // [m] the TopoSpec default
 
 double deg2rad(const double deg) { return deg * std::acos(-1.0) / 180.0; }
 
 // Compute-then-construct, as initialize_fixed does past the parameter reading.
-MOM::Grid make_spherical_grid(const MOM::Domain &domain, const MOM::GridSpec &spec) {
+MOM::Grid make_spherical_grid(const MOM::Domain &domain, const MOM::GridSpec &spec,
+                              const std::string &topo_config = "spoon") {
+  const MOM::TopoSpec topo = {.max_depth = MAX_DEPTH, .min_depth = MIN_DEPTH};
   MOM::GridFields fields = MOM::spherical_grid_fields(domain, spec);
   fields.CoriolisBu = MOM::planetary_rotation(domain, spec, fields.geoLatBu);
+  fields.max_depth = topo.max_depth;
+  fields.bathyT = MOM::named_topography(domain, topo_config, spec, topo,
+                                        fields.geoLonT, fields.geoLatT);
+  MOM::initialize_masks(domain, topo, fields.bathyT, fields);
   return MOM::Grid(std::move(fields));
 }
 
@@ -93,6 +103,39 @@ TEST(Grid, DoubleGyreGridSanity) {
   EXPECT_NEAR(grid.CoriolisBu().min(0), OMEGA, 1e-12 * OMEGA);
   EXPECT_GT(grid.CoriolisBu().max(0), OMEGA);
   EXPECT_LT(grid.CoriolisBu().max(0), 2.0 * OMEGA);
+
+  // The spoon basin never touches MAXIMUM_DEPTH (its deepest point is the
+  // interior peak of the sine profile) and never goes below EDGE_DEPTH.
+  EXPECT_LE(grid.bathyT().max(0), MAX_DEPTH);
+  EXPECT_GT(grid.bathyT().max(0), 0.5 * MAX_DEPTH);
+  EXPECT_GE(grid.bathyT().min(0), EDGE_DEPTH);
+
+  // Every h point of the global domain is ocean: the spoon's depths all
+  // exceed MINIMUM_DEPTH, and the basin is closed by the dry halo outside
+  // the global domain, which is what makes the boundary faces land.
+  EXPECT_DOUBLE_EQ(grid.mask2dT().min(0), 1.0);
+  EXPECT_DOUBLE_EQ(grid.mask2dCu().min(0), 0.0);
+  EXPECT_DOUBLE_EQ(grid.mask2dCu().max(0), 1.0);
+  EXPECT_DOUBLE_EQ(grid.mask2dCv().min(0), 0.0);
+  EXPECT_DOUBLE_EQ(grid.mask2dBu().min(0), 0.0);
+  EXPECT_DOUBLE_EQ(grid.mask2dBu().max(0), 1.0);
+}
+
+// A flat bottom is uniformly MAXIMUM_DEPTH over the computational domain, so
+// every interior point is ocean and only the dry halo outside the global
+// domain is land.
+TEST(Grid, FlatTopographyIsAllOcean) {
+  const MOM::Domain domain({.ni_global = NI, .nj_global = NJ,
+                            .ni_halo = HALO, .nj_halo = HALO,
+                            .reentrant_x = false});
+  const MOM::Grid grid = make_spherical_grid(
+      domain, {.south_lat = SOUTH_LAT, .len_lat = LEN_LAT,
+               .west_lon = WEST_LON, .len_lon = LEN_LON,
+               .rad_earth = RAD_EARTH, .omega = OMEGA}, "flat");
+
+  EXPECT_DOUBLE_EQ(grid.bathyT().max(0), MAX_DEPTH);
+  EXPECT_DOUBLE_EQ(grid.bathyT().min(0), MAX_DEPTH);
+  EXPECT_DOUBLE_EQ(grid.mask2dT().min(0), 1.0);
 }
 
 // On a zonally reentrant domain the halo longitudes keep MOM6's monotonic

@@ -133,4 +133,70 @@ GridFields spherical_grid_fields(const Domain &domain, const GridSpec &spec) {
   return fields;
 }
 
+void initialize_masks(const Domain &domain, const TopoSpec &topo_spec,
+                      const amrex::MultiFab &bathyT, GridFields &fields) {
+
+  const int n_levels = 1;
+  const int ncomp = 1;
+
+  fields.mask2dT = domain.make_field(Stagger::Cell, n_levels, ncomp);
+  fields.mask2dCu = domain.make_field(Stagger::XFace, n_levels, ncomp);
+  fields.mask2dCv = domain.make_field(Stagger::YFace, n_levels, ncomp);
+  fields.mask2dBu = domain.make_field(Stagger::Node, n_levels, ncomp);
+
+  // MOM6 zeroes all four masks before filling them; the points its loops skip
+  // (the outermost face and corner rows of the data domain) stay zero here too.
+  fields.mask2dT.setVal(0.0);
+  fields.mask2dCu.setVal(0.0);
+  fields.mask2dCv.setVal(0.0);
+  fields.mask2dBu.setVal(0.0);
+
+  // MOM6 masks with MASKING_DEPTH when it is set and with MINIMUM_DEPTH
+  // otherwise; only the latter path is implemented.
+  const amrex::Real Dmask = topo_spec.min_depth;
+
+  for (amrex::MFIter mfi(fields.mask2dT); mfi.isValid(); ++mfi) {
+    // The cell-centered box including halos: MOM6's data domain, isd:ied.
+    const amrex::Box cells = amrex::grow(mfi.validbox(), domain.nghost());
+
+    const amrex::Array4<amrex::Real> maskT = fields.mask2dT.array(mfi);
+    const amrex::Array4<amrex::Real> maskCu = fields.mask2dCu.array(mfi);
+    const amrex::Array4<amrex::Real> maskCv = fields.mask2dCv.array(mfi);
+    const amrex::Array4<amrex::Real> maskBu = fields.mask2dBu.array(mfi);
+    const amrex::Array4<const amrex::Real> D = bathyT.const_array(mfi);
+
+    amrex::ParallelFor(cells, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+      maskT(i, j, k) = (D(i, j, k) <= Dmask) ? 0.0 : 1.0;
+    });
+
+    // AMReX anchors face i on the low side of cell i, so the u point between
+    // cells i-1 and i carries index i; MOM6 labels the same point I = i-1.
+    // Its loop runs I = isd .. ied-1, which is i = isd+1 .. ied here.
+    const amrex::Box u_faces =
+        amrex::surroundingNodes(cells, 0).growLo(0, -1).growHi(0, -1);
+    amrex::ParallelFor(u_faces, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+      maskCu(i, j, k) = maskT(i - 1, j, k) * maskT(i, j, k);
+    });
+
+    const amrex::Box v_faces =
+        amrex::surroundingNodes(cells, 1).growLo(1, -1).growHi(1, -1);
+    amrex::ParallelFor(v_faces, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+      maskCv(i, j, k) = maskT(i, j - 1, k) * maskT(i, j, k);
+    });
+
+    // The corner mask follows from the face masks, as in MOM6.
+    amrex::Box corners = amrex::surroundingNodes(cells, 0);
+    corners = amrex::surroundingNodes(corners, 1);
+    corners.growLo(0, -1).growHi(0, -1).growLo(1, -1).growHi(1, -1);
+    amrex::ParallelFor(corners, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+      maskBu(i, j, k) = (maskCu(i, j - 1, k) * maskCu(i, j, k)) *
+                        (maskCv(i - 1, j, k) * maskCv(i, j, k));
+    });
+  }
+
+  // defer: the OBC-aware mask revisions of initialize_masks (OBC_dir_u/v and
+  //        open_corner_OBCs); the double_gyre configuration has no open
+  //        boundaries.
+}
+
 } // namespace MOM

@@ -130,6 +130,30 @@ public:
   /// @return The q-point Coriolis parameter field.
   const amrex::MultiFab &CoriolisBu() const { return fields_.CoriolisBu; }
 
+  /// @brief The maximum depth of the ocean [Z ~> m].
+  /// @return The maximum depth.
+  amrex::Real max_depth() const { return fields_.max_depth; }
+
+  /// @brief The ocean bottom depth at h points, positive down [Z ~> m].
+  /// @return The bathymetry field.
+  const amrex::MultiFab &bathyT() const { return fields_.bathyT; }
+
+  /// @brief The land/sea mask at h points: 1 for ocean, 0 for land [nondim].
+  /// @return The h-point mask field.
+  const amrex::MultiFab &mask2dT() const { return fields_.mask2dT; }
+
+  /// @brief The land/sea mask at u points: 1 for ocean, 0 for land [nondim].
+  /// @return The u-point mask field.
+  const amrex::MultiFab &mask2dCu() const { return fields_.mask2dCu; }
+
+  /// @brief The land/sea mask at v points: 1 for ocean, 0 for land [nondim].
+  /// @return The v-point mask field.
+  const amrex::MultiFab &mask2dCv() const { return fields_.mask2dCv; }
+
+  /// @brief The land/sea mask at q points: 1 for ocean, 0 for land [nondim].
+  /// @return The q-point mask field.
+  const amrex::MultiFab &mask2dBu() const { return fields_.mask2dBu; }
+
 private:
   GridFields fields_;  ///< The grid fields (owned).
 };

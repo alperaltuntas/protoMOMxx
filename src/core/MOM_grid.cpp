@@ -44,6 +44,16 @@ Grid::Grid(GridFields &&fields)
   check_field(fields_.dyBu, "dyBu");
 
   check_field(fields_.CoriolisBu, "CoriolisBu");
+
+  check_field(fields_.bathyT, "bathyT");
+  check_field(fields_.mask2dT, "mask2dT");
+  check_field(fields_.mask2dCu, "mask2dCu");
+  check_field(fields_.mask2dCv, "mask2dCv");
+  check_field(fields_.mask2dBu, "mask2dBu");
+
+  if (!(fields_.max_depth > 0.0)) {
+    logger::fatal("Grid: max_depth is not set.");
+  }
 }
 
 } // namespace MOM

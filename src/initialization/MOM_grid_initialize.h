@@ -20,4 +20,18 @@ namespace MOM {
 ///         planetary_rotation).
 GridFields spherical_grid_fields(const Domain &domain, const GridSpec &spec);
 
+/// @brief Create the land/sea masks at the h/u/v/q points from the bottom
+/// depth: an h point is ocean where its depth exceeds the masking depth, and
+/// the u/v/q masks are products of the surrounding h masks. The analogue of
+/// MOM6's initialize_masks.
+///
+/// MOM6's MASKING_DEPTH branch is not carried: only its default path, where
+/// MINIMUM_DEPTH is the land/sea threshold, is implemented.
+/// @param domain The computational domain the fields are created on.
+/// @param topo_spec The topography specification (the masking depth).
+/// @param bathyT The bottom depth at h points, halos filled [Z ~> m].
+/// @param fields The grid fields; the four mask fields are created and filled.
+void initialize_masks(const Domain &domain, const TopoSpec &topo_spec,
+                      const amrex::MultiFab &bathyT, GridFields &fields);
+
 } // namespace MOM

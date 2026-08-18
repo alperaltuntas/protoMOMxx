@@ -75,6 +75,64 @@ void read_rotation_params(RuntimeParams &params, GridSpec &spec) {
   }
 }
 
+// Read the topography configuration into the spec. The analogue of the
+// parameter reads of MOM6's MOM_initialize_topography
+// (MOM_fixed_initialization.F90) and initialize_topography_named
+// (MOM_shared_initialization.F90).
+std::string read_topography_params(RuntimeParams &params, TopoSpec &spec) {
+
+  std::string config;
+  params.get("TOPO_CONFIG", config,
+             {.desc = "This specifies how bathymetry is specified:\n"
+                      "\t file - read bathymetric information from the file\n"
+                      "\t\t specified by (TOPO_FILE).\n"
+                      "\t flat - flat bottom set to MAXIMUM_DEPTH.\n"
+                      "\t bowl - an analytically specified bowl-shaped basin\n"
+                      "\t\t ranging between MAXIMUM_DEPTH and MINIMUM_DEPTH.\n"
+                      "\t spoon - a similar shape to 'bowl', but with an vertical\n"
+                      "\t\t wall at the southern face.\n"
+                      "\t halfpipe - a zonally uniform channel with a half-sine\n"
+                      "\t\t profile in the meridional direction.\n"
+                      "\t USER - call a user modified routine.",
+              .fail_if_missing = true});
+
+  // MOM6 reads MAXIMUM_DEPTH unlogged here and logs it afterwards, once the
+  // named configuration has confirmed it was set.
+  params.get("MAXIMUM_DEPTH", spec.max_depth,
+             {.desc = "The maximum depth of the ocean.",
+              .units = "m",
+              .fail_if_missing = true,
+              .do_not_log = true});
+
+  params.get("MINIMUM_DEPTH", spec.min_depth,
+             {.default_value = 0.0,
+              .desc = "The minimum depth of the ocean.",
+              .units = "m"});
+
+  if (config != "flat") {
+    params.get("EDGE_DEPTH", spec.edge_depth,
+               {.default_value = 100.0,
+                .desc = "The depth at the edge of one of the named topographies.",
+                .units = "m"});
+    params.get("TOPOG_SLOPE_SCALE", spec.expdecay,
+               {.default_value = 400000.0,
+                .desc = "The exponential decay scale used in defining some of "
+                        "the named topographies.",
+                .units = "m"});
+  }
+
+  if (!(spec.max_depth > 0.0)) {
+    logger::fatal("initialize_fixed: MAXIMUM_DEPTH must be positive.");
+  }
+  if (spec.min_depth < 0.0) {
+    // MOM6 accepts a negative MINIMUM_DEPTH only with MASKING_DEPTH set, which
+    // is not implemented here.
+    logger::fatal("initialize_fixed: MINIMUM_DEPTH must not be negative.");
+  }
+
+  return config;
+}
+
 } // namespace
 
 GridFields initialize_fixed(const Domain &domain, RuntimeParams &params) {
@@ -111,9 +169,24 @@ GridFields initialize_fixed(const Domain &domain, RuntimeParams &params) {
     logger::fatal("initialize_fixed: Unrecognized grid configuration \"", config, "\".");
   }
 
-  // todo: topography (TOPO_CONFIG, MINIMUM_DEPTH, MAXIMUM_DEPTH) and the
-  //       land/sea masks are read and set here, between the metrics and the
-  //       rotation, matching MOM6's MOM_initialize_fixed order.
+  // Topography and the land/sea masks, between the metrics and the rotation,
+  // matching MOM6's MOM_initialize_fixed order.
+  TopoSpec topo_spec;
+  const std::string topo_config = read_topography_params(params, topo_spec);
+  fields.max_depth = topo_spec.max_depth;
+  fields.bathyT = named_topography(domain, topo_config, spec, topo_spec,
+                                   fields.geoLonT, fields.geoLatT);
+
+  // MOM6 logs MAXIMUM_DEPTH here, after the named configuration has used it
+  // (log_param, following the unlogged read above). RuntimeParams has no
+  // log-only entry point, so this is a second read of the same key, which
+  // produces the same documentation line.
+  params.get("MAXIMUM_DEPTH", topo_spec.max_depth,
+             {.desc = "The maximum depth of the ocean.",
+              .units = "m",
+              .fail_if_missing = true});
+
+  initialize_masks(domain, topo_spec, fields.bathyT, fields);
 
   read_rotation_params(params, spec);
   fields.CoriolisBu = planetary_rotation(domain, spec, fields.geoLatBu);
