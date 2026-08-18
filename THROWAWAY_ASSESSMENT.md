@@ -22,9 +22,15 @@ with legacy MOM6 actually goes, and what the remaining work costs.
 | `ba12efc` | The derived grid metrics deferred at PR 4 |
 | `44cb557` | The dynamical core: unsplit RK2 + continuity/Coriolis/pressure/viscosity |
 | `ae258ed` | `NBOXES`, so layout independence is testable without MPI |
-| (new) | `MOM_coms`: the order-invariant global sum (Hallberg & Adcroft 2014) |
-| (new) | `MOM_sum_output`: `ocean.stats`, byte-compatible with MOM6's |
-| (new) | The bit-for-bit fixes of section 2 |
+| `90f2a57` | The bit-for-bit fixes of section 2 |
+| `a2aa8c1` | `MOM_coms`, the order-invariant global sum (Hallberg & Adcroft 2014), and `MOM_sum_output`: `ocean.stats`, byte-compatible with MOM6's |
+| `80993b3` | The `src/types` layering, carried through the dynamics |
+| `e91cf35` | The three fixes that closed the last of the bit-for-bit gap |
+
+Two further branches carry the instrumentation the exercise needed, kept off
+this one because they are scaffolding rather than model code: `dg_instrument`
+(the pointwise dump of §2, with `dbg_dump_dg` in the MOM6 submodule as its
+Fortran half) and `dg_timers` (the named timer regions of §4).
 
 New code, this branch: about 3,700 lines. The dynamics is 1,903 of them,
 against 18,555 lines in the seven MOM6 modules it corresponds to. Most of
@@ -79,22 +85,20 @@ protoMOMxx, same 44x40x2 configuration, one rank.
 exactly at every point. MOM6's own bit-count checksums agree too: `areaT`
 53108, `dxT` 53284, initial `h` 82985.
 
-**The prognostic state is bit-identical for 108 dynamics steps** -- nine
-simulated hours. Every value of `u`, `v` and `h`, at every point, matches
-MOM6's per-step diagnostic output exactly through step 108; the first
-difference is one thickness value, one ulp, at step 109.
+**The prognostic state is bit-identical at every step of the run.** Every
+value of `u`, `v` and `h`, at every point and in both layers, matches MOM6's
+exactly at all 2,880 dynamics steps of the ten simulated days -- not to
+roundoff, identically.
 
-**Ten simulated days agree to roundoff.** `ocean.stats`, written by both
-models, is byte-identical at step 0, and thereafter the energy per unit mass
-agrees to about 1e-13 relative while the CFL, mean sea level and total mass
-columns stay byte-identical:
+**So is the energy diagnostic.** Every per-cell kinetic and potential energy
+term is identical at all eleven reports, and `ocean.stats` is byte-identical
+to MOM6's for the whole run: energy, CFL, mean sea level, total mass, every
+column, every line.
 
-| dynamics steps | max rel. diff, u | max rel. diff, h | rel. diff in reported energy |
-|---:|---:|---:|---:|
-| 1 - 108 | 0 | 0 | 0 at step 0 |
-| 200 | 7.5e-12 | 8.0e-16 | -- |
-| 288 (1 day) | 7.7e-12 | 1.0e-15 | 2.4e-13 |
-| 2880 (10 days) | -- | -- | 4.9e-14 |
+An earlier draft of this document stopped at 108 steps and roundoff agreement
+thereafter, and attributed the residual to the Coriolis term at v points. Both
+were wrong, and how they were wrong is the useful part; see "The residual was
+not where the tool could see it" below.
 
 Getting there took several fixes, and the interesting thing about them is that
 only two are numerical errors.
@@ -127,10 +131,13 @@ from inside the time stepping scheme. MOM6 calls it from `step_MOM` before the
 scheme runs, with the thickness at the start of the step. The two agree at the
 first step, when `h_av` is `h`, and diverge afterwards.
 
-The continuity solver floored the updated thickness at zero. MOM6 floors it at
-one Angstrom, in both the zonal and the meridional pass. It does not bind in
-this configuration, so it cost nothing here and would have cost a great deal
-somewhere else.
+The continuity solver floored the updated thickness at zero. MOM6 floors the
+meridional pass at one Angstrom -- and the zonal pass at zero, because
+`continuity_zonal_convergence` is called without the optional `hmin` and
+`continuity_merdional_convergence` is called with it. Neither floor binds in
+this configuration, so the difference cost nothing here and would have cost a
+great deal somewhere else. protoMOMxx currently floors both at the Angstrom,
+which is still a deviation, and still one that does not bind.
 
 A third, smaller one is worth its own line because of what it says about
 transcription. `GV%H_subroundoff` -- the thickness MOM6 adds to a denominator
@@ -179,25 +186,57 @@ rule with teeth: **transcribe MOM6's statement boundaries, not just its
 formulas.** An intermediate that MOM6 stores in an array is part of the
 numerical contract.
 
+Two more sites turned up at the end of the exercise, and they are worth
+stating because they are the two directions the mistake can go. gfortran
+*does* contract the thickness update,
+`h = max(hin - dt*IareaT*(uh(I) - uh(I-1)), h_min)`, so that is an
+`std::fma`; it changes the answer only about once in 1,760 points, because
+the increment is far smaller than the thickness it is subtracted from, which
+is why it took 109 steps to surface. gfortran *does not* contract
+`u(I-1)**2 + u(I)**2` in `write_energy`, and g++ does, so those four squares
+need the barrier. The kinetic energy terms go into a fixed-point sum, which
+quantises most last-bit differences away, so a wrong term appeared as one
+wrong day in ten rather than as a wrong number every day.
+
 Finding which expressions those are is not guesswork. Given a stage whose
 inputs are known bit-for-bit -- and after the first step, every input to every
 kernel is -- the fusion pattern can be *solved for*: reimplement the kernel in
 Python with exact (rational) fused multiply-add, enumerate the placements, and
 score each against MOM6's own output. That is how the horizontal viscosity was
 closed (one FMA, in the outer sum of the stress divergence, and nothing else in
-the routine) and how the continuity solver was closed (two FMAs, both inside
-the positive-definite limiter, and nothing else). Each search took seconds and
-returned an exact match on every point.
+the routine), how the continuity solver was closed, and how the kinetic energy
+was closed (no contraction anywhere, matching all 1,760 points on the first
+try). Each search took seconds and returned an exact match on every point.
 
-What survives is smaller than the tool can see. The Coriolis term at v points
-differs from MOM6 by two or three population counts at the second step, at
-points in the vanishing bottom layer over the shelf, and its minima, maxima and
-every other stage of the step agree exactly. It is not localizable further,
-because MOM6 posts no diagnostic for `CAv` and none for the intermediate
-transports the predictor stage uses, so there is no pointwise reference to
-solve against -- only a checksum, which is too weak to discriminate. The
-prognostic state absorbs it: `u`, `v` and `h` stay bit-identical for another
-hundred steps.
+### The residual was not where the tool could see it
+
+The earlier draft said the last difference was "smaller than the tool can
+see": two or three population counts in `CAv` at the second step, not
+localizable further because MOM6 posts no diagnostic for `CAv`. That
+conclusion was wrong twice over, and both errors are instructive.
+
+It was not in `CAv`. `CAv` was simply the first stage that *reported* a
+difference; `uh` already differed on input, and `uh` comes from the continuity
+solver's PPM edge values, which differed at four points with bit-identical
+inputs. Reading a difference at the first stage that shows one, rather than
+walking upstream to the first stage whose *inputs* agree and whose output does
+not, attributes it to the wrong kernel.
+
+And it was not a contraction question at all, so no amount of FMA searching
+could have found it. Fortran's `3.0*dh**2` is `3*(dh*dh)`, because `**` binds
+tighter than `*`; the C++ had `3.0 * dh * dh`, which is `(3*dh)*dh`. That is
+operator precedence, not fusion, and it was invisible to a search whose
+hypothesis space was where the fused multiply-adds go.
+
+What made it visible was giving up on checksums. A checksum says a stage
+disagrees; it does not say where or by how much, and for `CAv`, the PPM edge
+thicknesses, the transports and the per-cell energy terms MOM6 offers no
+diagnostic at all. Both models were instrumented to write the arrays
+themselves -- a two-line subroutine per module streaming a 2-D slice with its
+index bounds -- and then compared point by point. Localising each of the three
+remaining differences took minutes. The instrumentation is on the
+`dg_instrument` and `dbg_dump_dg` branches, and the lesson is general: **for
+bit-level work, build the pointwise dump before the search, not after.**
 
 ### MOM6's answer depends on DT_FORCING
 
@@ -227,10 +266,11 @@ the thermodynamic timestep does.
 - **The Adcroft reciprocal** (`1/x`, or 0 where `x` is 0) is a convention, not
   an optimization, and it appears in every derived metric.
 
-**Conclusion on parity:** it is achievable and it was achieved -- exactly for
-the first 108 dynamics steps, and to roundoff for ten simulated days. What it
-costs is a parity harness used continuously, a discipline about parameter
-names, and per-expression attention to contraction. None of that is
+**Conclusion on parity:** it is achievable and it was achieved -- exactly,
+at every point of every step of ten simulated days, `ocean.stats` included.
+What it costs is a parity harness used continuously, a discipline about
+parameter names, per-expression attention to contraction, and a pointwise dump
+on both sides for the cases contraction does not explain. None of that is
 discoverable by reading the Fortran, and all of it is mechanical once the
 harness exists.
 
@@ -254,20 +294,93 @@ now holds everywhere that is testable without MPI.
 
 ## 4. Performance
 
-44x40x2, 2,880 dynamics steps, one rank, gcc 14.3, MOM6 at its own release
-flags and protoMOMxx at `-O3`. Fastest of five runs on a shared login node;
-the spread across runs is about 2%, so only the first digit of the ratio
-carries weight:
+44x40x2, 2,880 dynamics steps, one rank, gcc 14.3 on a derecho compute node,
+fastest of five interleaved runs. Every build below writes `ocean.stats` and
+nothing else, and -- except MOM6 at `-O3`, which is not bit-for-bit with
+itself at `-O2` -- every one of them writes the *same* `ocean.stats`, so these
+are timings of the same computation.
 
-| | main loop | per step |
-|---|---:|---:|
-| MOM6 | 4.040 s | 1.403 ms |
-| protoMOMxx | 2.341 s | 0.813 ms |
+| build | main loop | per step | vs MOM6 `-O2` |
+|---|---:|---:|---:|
+| MOM6 `-O2` (its shipped flags) | 4.56 s | 1.58 ms | 1.00x |
+| MOM6 `-O3` | 4.02 s | 1.40 ms | 1.13x |
+| protoMOMxx `-O2` | 5.21 s | 1.81 ms | 0.87x |
+| protoMOMxx `-O2` + inlining options | 3.02 s | 1.05 ms | **1.51x** |
+| protoMOMxx `-O3` (its default) | 2.63 s | 0.91 ms | **1.73x** |
 
-Both runs write `ocean.stats` and no other output. protoMOMxx is **1.7x
-faster**. Read that carefully:
+### The optimization level is most of the story, and it is a cliff
 
-- MOM6's diagnostics cost only 2.7% here (measured by running with an empty
+An earlier draft reported a single 1.7x and left the flags implicit. They are
+not comparable flags: MOM6 is built by mkmf, whose production branch is `-O2`,
+and protoMOMxx is a CMake `Release` build, which is `-O3`. Matched, the
+picture is not one number but two, and the gap between them is the finding.
+
+At `-O2`, GCC declines to inline the AMReX `ParallelFor` lambda bodies into
+the loop. Every grid point becomes a call, with the captured `Array4`
+descriptors reloaded across it: 75.5 G instructions against 25.5 G at `-O3`,
+and `perf report` shows the lambda `operator()` as separate hot symbols at
+`-O2` and none at `-O3`. Adding
+
+    -finline-functions --param max-inline-insns-auto=1000 \
+                       --param max-inline-insns-single=1000
+
+to an otherwise stock `-O2` build recovers 88% of the difference and turns
+"13% slower than MOM6" into "1.5x faster", the same ratio the `-O3` build has.
+
+It is worth being precise about what it is *not*, because the plausible
+explanations are all wrong. It is not vectorisation: `-O3 -fno-tree-vectorize`
+still runs in 2.89 s, and `-O2 -fvect-cost-model=dynamic` still takes 6.23 s.
+It is not `-finline-functions` on its own, which does nothing at `-O2`'s
+default size limits. It is none of the other nine `-O3`-only passes, tested
+individually. And it is not the three files compiled with
+`-ffp-contract=off` for parity: those kernels recover fully with the inlining
+options while contraction stays off.
+
+The practical reading is that **protoMOMxx's performance is a cliff, not a
+slope, and it sits on the edge of it.** The same fragility showed up when the
+timers of §4.1 were added: the extra scopes are enough to tip several kernels
+from inlined to out-of-line and cost a quarter of the main loop at `-O2`,
+while costing about 1% at `-O3`. A CMake `Release` build is on the right side
+of the cliff, but nothing in the build system says so, and any consumer who
+builds at `-O2` will draw the wrong conclusion about AMReX. The inlining
+options belong in the build.
+
+### Where the time goes
+
+Both models were instrumented to report the same regions: MOM6 already does it
+with `cpu_clock_begin`/`cpu_clock_end` at `clock_grain = 'ROUTINE'`, and
+protoMOMxx now prints the same table under MOM6's own clock names
+(`src/framework/MOM_profile.h`, branch `dg_timers`), so the rows line up.
+Seconds for the whole run:
+
+| routine | MOM6 `-O2` | MOM6 `-O3` | protoMOMxx `-O3` |
+|---|---:|---:|---:|
+| vertical viscosity | 2.47 | 2.55 | **1.04** |
+| continuity | 0.80 | 0.54 | 0.67 |
+| Coriolis & momentum advection | 0.33 | 0.20 | 0.27 |
+| horizontal viscosity | 0.32 | 0.18 | 0.30 |
+| set BBL viscosity | 0.33 | 0.29 | **0.14** |
+| pressure force | 0.03 | 0.02 | 0.06 |
+| momentum increments | 0.03 | 0.03 | 0.06 |
+| halo exchange | 0.02 | 0.02 | 0.00 |
+
+MOM6 spends **54% of its main loop in the vertical viscosity**, and that is
+where the entire advantage comes from: protoMOMxx is 2.4x faster there, at
+every optimization level including `-O2`, where it is otherwise behind. The
+bottom boundary layer is 2.3x faster for the same reason. The three kernels
+that are inlining-sensitive -- continuity, Coriolis, horizontal viscosity --
+are the only places protoMOMxx is ever slower, and at `-O3` they are close to
+level.
+
+The harness that produces this table is on turbo-prof's `throwaway_dg` branch
+(`run-protomomxx-compare.sh`, `gen_protomomxx_report.py`,
+`docs/PROTOMOMXX_COMPARE.md`), and it cross-checks `ocean.stats` across the
+configs, so a comparison cannot silently drift into timing two different
+computations.
+
+### Caveats that have not changed
+
+- MOM6's diagnostics cost only 2.7% here (measured with an empty
   `diag_table`), so their absence is not the explanation.
 - Neither model runs the barotropic solver, tracers or thermodynamics in this
   configuration, so the comparison is over the same physics.
@@ -275,20 +388,23 @@ faster**. Read that carefully:
   rejects outright, and MOM6 does halo exchanges that a single-box serial run
   does not.
 - 44x40x2 fits in cache, so this measures instruction count, not memory
-  behaviour. Do not extrapolate to a real grid.
+  behaviour. **Do not extrapolate to a real grid.**
 
 The honest reading: C++ and AMReX are not a performance liability at this
 scale, and the per-call `MultiFab` allocation in the kernels (see §5) is not
 yet visible in the profile.
 
-The bit-for-bit work of §2 cost about 6% of the main loop, and it is worth
-knowing which half is which:
+### What the bit-for-bit work cost
+
+Measured at `-O3`, the parity work of §2 costs about 6% of the main loop, and
+it is worth knowing which half is which:
 
 | change | cost |
 |---|---:|
 | velocity truncation (`vertvisc_limit_vel`) | +4.0% |
 | contraction disabled in three kernels | +2.0% |
 | the `src/types` layering | 0.0% |
+| the three closing fixes (two `fma`s, one barrier, one parenthesis) | 0.0% |
 
 The truncation is the larger of the two and is not a parity device at all: it
 is a MOM6 behaviour that was missing, and it costs a full pass over `u` and
@@ -296,7 +412,8 @@ is a MOM6 behaviour that was missing, and it costs a full pass over `u` and
 cost. The contraction is the price of the rounding fidelity, and it is smaller
 than it feels like it should be. The layering costs nothing, which is what a
 change that only moves files between archives should cost -- worth measuring
-rather than assuming.
+rather than assuming. The final fixes cost nothing measurable: an `fma` is one
+instruction where two stood, and the barrier is empty.
 
 ## 5. Design assessment
 
@@ -516,6 +633,23 @@ and enumerating the placements finds the pattern that reproduces MOM6 on every
 point, in seconds. That technique should be part of the parity harness, not a
 one-off.
 
+**A search only finds what is in its hypothesis space, and the pointwise dump
+finds the rest.** The last difference in this exercise survived every
+contraction search for a simple reason: it was not a contraction. Fortran's
+`3.0*dh**2` is `3*(dh*dh)` and the C++ had `(3*dh)*dh`, which is operator
+precedence. Being confident in a solver is not the same as being right, and
+the tell was that the solver kept reporting "no placement matches". The tool
+that does not assume anything is a raw dump of every stage on both sides,
+compared point by point, walking upstream to the first stage whose *inputs*
+agree and whose output does not. It should be built before the search, not
+after it: the three fixes it found had each cost weeks of the wrong
+explanation.
+
+**Operator precedence is part of the transcription.** `**` binds tighter than
+`*` in Fortran, so `a*b**2` is `a*(b*b)` and the obvious C++ `a*b*b` is not.
+This is not a numerics subtlety, it is a language difference, and it is
+invisible to every check short of a pointwise comparison.
+
 **The cost is now measurable.** Backbone plus a working subset dynamical core:
 about 3,700 lines. That is small enough that discarding it is
 genuinely affordable, and small enough that the estimate for the full
@@ -524,9 +658,11 @@ size -- is credible rather than a guess.
 
 **What to keep from the throwaway:** the `src/types` layering, which is
 already back on `horGrid`; `MOM_loop_boxes.h`; `report_field` and its
-MOM6-compatible checksum; `MOM_coms` and `MOM_sum_output` (both faithful to
-MOM6 and both cheap to test); the `NBOXES` layout test; the contraction
-findings; and the inventory of live aborts. **What to throw away:** the kernels
+MOM6-compatible checksum, and the pointwise dump beside it, which is what the
+checksum could not do; `MOM_coms` and `MOM_sum_output` (both faithful to MOM6
+and both cheap to test); the `NBOXES` layout test; the contraction findings;
+the named timer regions, which cost nothing and make a comparison with MOM6 a
+routine-by-routine one; and the inventory of live aborts. **What to throw away:** the kernels
 themselves. They should be re-derived on top of the units layer and the typed
 fields, not retrofitted -- retrofitting numerics is exactly what §6 warns
 against.
