@@ -10,7 +10,7 @@ namespace MOM {
 Model::Model(RuntimeParams &params)
   : config_(read_config_switches(params)),
     domain_(make_domain(params)),
-    grid_(initialize_fixed(domain_, params)),
+    grid_(make_grid(domain_, params)),
     vgrid_(params),
     state_(initialize_state(domain_,
                             {.nk = vgrid_.nk(),

@@ -12,7 +12,6 @@ add_library(MOM_src_core
   MOM_CoriolisAdv.cpp
   MOM_dynamics_unsplit_RK2.cpp
   MOM_forcing_type.cpp
-  MOM_grid.cpp
   MOM_PressureForce.cpp
   MOM_state.cpp
   MOM_vertical_grid.cpp

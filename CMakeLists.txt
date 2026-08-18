@@ -44,6 +44,7 @@ endif()
 add_subdirectory("${TIM_SOURCE_DIR}/tim/cpp" "${CMAKE_BINARY_DIR}/extern/TIM/tim_cpp")
 
 add_subdirectory(src/framework)
+add_subdirectory(src/types)
 add_subdirectory(src/initialization)
 add_subdirectory(src/core)
 add_subdirectory(src/diagnostics)

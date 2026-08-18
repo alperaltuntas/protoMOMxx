@@ -1,5 +1,5 @@
 // Sanity/smoke tests for the Grid class and the spherical metric/rotation
-// setup (src/core/MOM_grid.cpp, src/initialization): construction on the
+// setup (src/types/MOM_grid.cpp, src/initialization): construction on the
 // double_gyre configuration, staggering, boundary alignment, and a few simple
 // physical properties.
 //
@@ -39,7 +39,7 @@ constexpr double EDGE_DEPTH = 100.0;    // [m] the TopoSpec default
 
 double deg2rad(const double deg) { return deg * std::acos(-1.0) / 180.0; }
 
-// Compute-then-construct, as initialize_fixed does past the parameter reading.
+// Compute-then-construct, as make_grid does past the parameter reading.
 MOM::Grid make_spherical_grid(const MOM::Domain &domain, const MOM::GridSpec &spec,
                               const std::string &topo_config = "spoon") {
   const MOM::TopoSpec topo = {.max_depth = MAX_DEPTH, .min_depth = MIN_DEPTH};

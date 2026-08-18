@@ -9,18 +9,19 @@
 
 #include "MOM_domain_infra.h"
 #include "MOM_file_parser.h"
-#include "MOM_grid_fields.h"
+#include "MOM_grid.h"
 
 namespace MOM {
 
 /// @brief Read the grid parameters (GRID_CONFIG and its configuration-specific
-/// extents, ROTATION and its rate) and compute the grid fields on the domain's
-/// decomposition. The analogue of MOM6's MOM_initialize_fixed.
+/// extents, ROTATION and its rate), compute the grid fields on the domain's
+/// decomposition, and construct the Grid from them. The analogue of MOM6's
+/// MOM_initialize_fixed.
 /// @param domain The computational domain the grid fields are created on.
 /// @param params Runtime parameters.
-/// @return The computed grid fields, ready for the Grid constructor.
+/// @return The constructed Grid.
 /// @pre The infrastructure layer (MOM::Infra) is initialized.
 /// @throws logger::FatalError on an unsupported or an invalid configuration.
-GridFields initialize_fixed(const Domain &domain, RuntimeParams &params);
+Grid make_grid(const Domain &domain, RuntimeParams &params);
 
 } // namespace MOM

@@ -3,7 +3,7 @@
 /// @brief The construction-phase counterpart of the horizontal grid: the
 ///        grid specification read from the runtime parameters, and the
 ///        struct of grid fields that src/initialization computes and the
-///        Grid constructor (src/core) takes over. The analogue of MOM6's
+///        Grid constructor takes over. The analogue of MOM6's
 ///        MOM_dyn_horgrid (dyn_horgrid_type).
 
 #include <AMReX_MultiFab.H>
@@ -44,7 +44,7 @@ struct TopoSpec {
 /// Coriolis parameter) and the geographic extents they were computed from.
 /// The analogue of MOM6's dyn_horgrid_type.
 ///
-/// This is the construction-phase counterpart of Grid (src/core): a plain
+/// This is the construction-phase counterpart of Grid: a plain
 /// struct with no behavior of its own, so the setup functions in
 /// src/initialization can fill it freely. Each field is empty until its
 /// setup function creates and computes it. Once complete, the struct is

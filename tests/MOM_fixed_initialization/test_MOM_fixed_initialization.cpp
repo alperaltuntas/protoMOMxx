@@ -1,9 +1,9 @@
-// Unit tests for initialize_fixed (src/initialization/MOM_fixed_initialization.cpp):
+// Unit tests for make_grid (src/initialization/MOM_fixed_initialization.cpp):
 // the parameter-driven computation of the grid fields, including defaults and
 // the rejection of invalid extents. The grid values themselves are covered in
 // tests/MOM_grid.
 //
-// initialize_fixed requires the infra layer to be initialized, hence the
+// make_grid requires the infra layer to be initialized, hence the
 // main() below, which instantiates a MOM::Infra.
 
 #include <filesystem>
@@ -28,15 +28,15 @@ MOM::Grid grid_from_param_file(const std::string &file_name) {
   EXPECT_TRUE(std::filesystem::exists(path)) << "Test file " << path << " does not exist";
   MOM::RuntimeParams params(path.string());
   const MOM::Domain domain = MOM::make_domain(params);
-  return MOM::Grid(MOM::initialize_fixed(domain, params));
+  return MOM::make_grid(domain, params);
 }
 
 } // namespace
 
-// initialize_fixed computes the grid fields from the parameter file, with
+// make_grid computes the grid fields from the parameter file, with
 // defaults applied for the parameters the file omits (WESTLON, RAD_EARTH,
 // ROTATION, OMEGA).
-TEST(MOMFixedInitTest, InitializeFixedFromParamFile) {
+TEST(MOMFixedInitTest, MakeGridFromParamFile) {
   const MOM::Grid grid = grid_from_param_file("MOM_input_test");
 
   EXPECT_DOUBLE_EQ(grid.south_lat(), 30.0);
