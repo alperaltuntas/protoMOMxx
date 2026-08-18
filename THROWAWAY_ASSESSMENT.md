@@ -517,17 +517,94 @@ that means 69.5 G instructions against 22.8 G and a run time of 6.41 s against
 2.72 s. A blunt inlining hammer is worse than the heuristic; the narrow
 attribute on the lambda is what fits.
 
-Restructuring the kernels the way `TIM/mom/cpp` does -- one `ParallelFor` per
-free function, the per-point arithmetic in force-inlined helpers -- was tried
-first and is *not* what fixes it. Extracting the eight kernels of
-`HorizontalViscosity::calculate` that way moved the count from 12 to 11 under
-gcc `-O2` and not at all under nvc++. What decides it is the size of the kernel
-body against the inliner's limit: `--param max-inline-insns-single=1000` alone
-takes that file from 12 to 0, TIM's largest kernel bodies compile to 564--660
-bytes and are inlined, and the protoMOMxx kernels that are not are 684--985.
-TIM lands on the right side of the limit because each of its kernels does one
-thing, which is a granularity choice with its own cost in passes over memory.
-Forcing the inline gets the same result without paying it.
+Restructuring the kernels the way `TIM/mom/cpp` does was tried first and is
+not what fixes it; the next section is why, and what the two designs actually
+trade.
+
+### Why the TIM kernel decomposition would not have fixed it
+
+`TIM/mom/cpp` is the obvious place to look for a fix, because it has the same
+kernels under the same AMReX and does not have the problem: compiled here, its
+continuity file leaves nothing out of line at gcc `-O2`, and nothing at nvc++
+`-O3` where protoMOMxx's equivalent leaves four. It is written the other way
+round from protoMOMxx -- one `ParallelFor` per free function, the per-point
+arithmetic in `AMREX_FORCE_INLINE` helpers in a header -- so the natural
+reading is that the structure is what keeps it inlined.
+
+It is not. Rewriting `HorizontalViscosity::calculate` in exactly that shape,
+each of its eight kernels extracted to its own file-static function taking the
+`Box` and the `Array4`s it uses, moved the file from 12 out-of-line kernels to
+11 under gcc `-O2`, and from 4 to 4 under nvc++ `-O3`. Nothing that matters
+moved.
+
+The reason is that GCC has two separate gates and only one of them is about
+where the kernel sits. Compiling the file both ways against each `--param`
+separates them:
+
+| gcc `-O2`, `MOM_hor_visc.cpp` | as shipped | one kernel per function |
+|---|---:|---:|
+| baseline | 12 | 11 |
+| `--param large-function-growth=1000` | 2 | 2 |
+| `--param max-inline-insns-single=1000` | **0** | **0** |
+
+The two columns are the same, which is the finding: extraction did not change
+which gate binds. `max-inline-insns-single` is the limit on the size of the
+thing being inlined -- the lambda -- and for these kernels it is the one that
+decides. A control confirms the other gate is real but only bites earlier:
+eight copies of one medium-sized kernel packed into a single function are all
+left out of line at `-O2`, and the same eight bodies split one-per-function are
+all inlined. Splitting works while the body is small enough to be near the
+threshold. Past it, nothing about the caller helps.
+
+That is the whole difference between the two files: TIM's kernels are under the
+limit and protoMOMxx's are over it. Raising `max-inline-insns-single` fixes
+protoMOMxx and TIM needs nothing raised, which is the cleanest statement of it
+-- a direct byte-for-byte size comparison is not, because at every optimization
+setting the compiler's own inlining choices decide whether a kernel is emitted
+as its own symbol or folded into the loop, so the two files are not measured on
+the same footing. What is directly countable is the granularity: TIM uses 13
+`ParallelFor`s for the PPM reconstruction and the edge thicknesses, and
+protoMOMxx does the reconstruction, the fluxes *and* the thickness convergence
+in 8. TIM inlines because each of its kernels does one thing, not because each
+lives in its own function.
+
+### The granularity is not a performance choice on either side
+
+TIM's kernels are that small because they have to be callable one at a time.
+`turbotmp_mom_continuity_ppm_bridge.cpp` exposes six entry points, one per MOM6
+subroutine, and MOM6's Fortran calls them individually: TIM replaces the
+continuity solver a routine at a time, in a running Fortran model, so its
+decomposition has to mirror `MOM_continuity_PPM.F90`'s subroutine boundaries.
+protoMOMxx replaces the whole time step and never has to hand control back, so
+it is free to fuse, and does.
+
+The cost shows up in passes over memory: the 13-against-8 above, for strictly
+less work on TIM's side. Every extra pass is another round trip for an
+intermediate that a fused kernel would have kept in registers.
+
+**Whether that is worth anything cannot be answered by this testcase, and
+should not be claimed from it.** 44x40x2 fits in cache, so the numbers in §4
+measure instruction count and not memory traffic; the fusion argument is about
+the traffic. On a grid that does not fit, and on a GPU -- where each
+`ParallelFor` is a separate kernel launch and every intermediate goes to global
+memory and comes back -- the gap should widen in protoMOMxx's favour, but that
+is reasoning from the machine model, not a measurement, and it belongs in the
+"not tested" list until someone runs it.
+
+What the evidence here does support is narrower, and it is about failure modes
+rather than speed. Fusion's measured drawback is that the kernels grow past the
+inliner's size limit, and that is recoverable: one attribute, no change to the
+numerics, no change to the loop structure, `-O2` back from 5.24 s to 3.26 s.
+Fine granularity's drawback is the extra passes, and no annotation recovers
+those -- undoing it means rewriting the kernels. Given a choice between a
+design whose cost is fixable at the annotation level and one whose cost is
+structural, the fused one is the safer default. That is a weaker claim than
+"protoMOMxx's kernels are better", and it is the one the measurements carry.
+
+Two things would settle the stronger claim: the same comparison on a grid too
+large for cache, and the GPU port. Neither is on §6's plan -- §6 is scoped to
+making the full double-gyre run -- and both are in §8's list of what was not
+tested.
 
 ### Caveats that have not changed
 
@@ -837,7 +914,13 @@ against.
   the infrastructure and the domain, not the dynamical core. Layout
   independence for the dynamics was tested with multiple boxes on one rank
   instead, which exercises the same halo code but not the exchange.
-- **GPU.** Not attempted.
+- **GPU.** Not attempted. It is also where the fused-versus-fine-grained
+  kernel question above would be decided, since each `ParallelFor` is a kernel
+  launch there and every intermediate between two of them makes a round trip
+  to global memory.
+- **Anything larger than cache.** 44x40x2 is 3,520 points; every performance
+  number here is an instruction count. The case for fusing kernels rests on
+  memory traffic, which this grid cannot exhibit.
 - **Restart exactness and rotational symmetry**, two of the four §5
   invariants; neither has an implementation to test.
 - **The bit-for-bit result on another machine.** This is now much less open
