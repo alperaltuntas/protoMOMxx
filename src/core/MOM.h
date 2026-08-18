@@ -8,6 +8,7 @@
 #include "MOM_domain_infra.h"
 #include "MOM_file_parser.h"
 #include "MOM_grid.h"
+#include "MOM_forcing_type.h"
 #include "MOM_state.h"
 #include "MOM_vertical_grid.h"
 
@@ -63,9 +64,10 @@ public:
   /// @brief Advance the model over one forcing interval. The analogue of
   /// MOM6's step_MOM: it runs the requested number of dynamics steps and
   /// dispatches on the configured time stepping scheme.
+  /// @param forces The mechanical forcing over this interval.
   /// @param dt_forcing The length of the forcing interval [T ~> s].
   /// @param n_steps The number of dynamics steps in the interval.
-  void step(amrex::Real dt_forcing, int n_steps);
+  void step(const MechForcing &forces, amrex::Real dt_forcing, int n_steps);
 
 private:
   // config_ initialization must precede domain_: its initializer sets the log 

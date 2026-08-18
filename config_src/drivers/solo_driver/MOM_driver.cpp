@@ -12,6 +12,7 @@
 #include "MOM_directories.h"
 #include "MOM_infra.h"
 #include "MOM_logger.h"
+#include "MOM_surface_forcing.h"
 
 /// @brief Main entry point for the protoMOMxx driver program.
 /// @param argc Number of arguments including binary name.
@@ -47,8 +48,13 @@ int main(int argc, char* argv[]) {
     // driver, which reads DT_FORCING and DAYMAX after initialize_MOM.
     MOM::Clock clock(params);
 
-    // todo: extract_surface_state()
-    // todo: surface_forcing_init()
+    // defer: extract_surface_state() -- nothing consumes the surface state
+    //        while the forcing is analytic and adiabatic.
+    // The analytic surface forcing of the solo driver, and the fields it
+    // writes into each forcing interval.
+    const MOM::SurfaceForcing surface_forcing(model.grid(), params);
+    MOM::MechForcing forces(model.domain());
+
     // defer: MOM_wave_interface_init(), data_override_init(), ice shelf hooks
 
     MOM::logger::note("Starting the time loop: ", clock.end_time() / 86400.0,
@@ -56,8 +62,8 @@ int main(int argc, char* argv[]) {
                       " dynamics steps per forcing interval.");
 
     while (!clock.done()) {
-      // todo: set_forcing(forces, clock.time())
-      model.step(clock.dt_forcing(), clock.steps_per_forcing());
+      surface_forcing.set_forcing(forces, clock.time());
+      model.step(forces, clock.dt_forcing(), clock.steps_per_forcing());
       clock.advance();
     }
 

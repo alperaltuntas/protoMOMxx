@@ -93,14 +93,27 @@ Model::Config Model::read_config_switches(RuntimeParams &params) {
   return config;
 }
 
-void Model::step(const amrex::Real dt_forcing, const int n_steps) {
+void Model::step(const MechForcing &forces, const amrex::Real dt_forcing,
+                 const int n_steps) {
 
   const amrex::Real dt_dyn = dt_forcing / static_cast<amrex::Real>(n_steps);
 
   for (int n = 0; n < n_steps; ++n) {
-    // todo: the dynamics. MOM6's step_MOM dispatches here on the four-way
-    //       split / split_RK4 / RK2 / RK3 branch.
+    // MOM6's step_MOM dispatches here on the four-way split / split_RK4 /
+    // RK2 / RK3 branch. Only the branch selection exists so far; the schemes
+    // themselves are the dynamics work that follows.
+    if (config_.split) {
+      if (config_.split_rk4) {
+        logger::fatal("Model::step: the split RK4 scheme is not implemented.");
+      }
+      // todo: step_MOM_dyn_split_RK2.
+    } else if (config_.use_RK2) {
+      // todo: step_MOM_dyn_unsplit_RK2.
+    } else {
+      // todo: step_MOM_dyn_unsplit (RK3).
+    }
     (void)dt_dyn;
+    (void)forces;
     // defer: the thermodynamic and tracer half of step_MOM (ADIABATIC is true
     //        and there are no tracers in the driving testcase), the diagnostic
     //        calls, and the surface-state extraction.
