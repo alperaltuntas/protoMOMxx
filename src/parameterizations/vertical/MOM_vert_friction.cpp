@@ -16,6 +16,12 @@ namespace {
 // the cap is effectively absent (I_amax = 0), so only a_cpl_max remains.
 constexpr amrex::Real A_CPL_MAX = 1.0e37;
 
+// The deepest column the per-column scratch arrays below can hold. Those arrays
+// are automatic so that the kernels around them stay inlinable and portable to
+// the GPU, which costs a compile-time bound. The constructor refuses a deeper
+// grid; without that check a deeper one overruns them silently.
+constexpr int MAX_NK = 64;
+
 // 1 / (1 + 0.09 z^6), MOM6's near-boundary blending function.
 AMREX_GPU_DEVICE AMREX_FORCE_INLINE
 amrex::Real boundary_fn(const amrex::Real z) {
@@ -37,6 +43,11 @@ VertFriction::VertFriction(RuntimeParams &params, const Domain &domain,
                            const VerticalGrid &vgrid) {
 
   params.doc_module("MOM_vert_friction", "");
+
+  if (vgrid.nk() > MAX_NK) {
+    logger::fatal("VertFriction: NK = ", vgrid.nk(), " exceeds the ", MAX_NK,
+                  " layers the per-column scratch arrays hold.");
+  }
 
   params.get("DIRECT_STRESS", direct_stress_,
              {.default_value = false,
@@ -172,12 +183,12 @@ void VertFriction::coefficients(const amrex::MultiFab &u, const amrex::MultiFab 
       }
 
       // Rebuild z_i on the way down and form the coupling coefficients.
-      amrex::Real z_i[64];
+      amrex::Real z_i[MAX_NK + 1];
       z_i[nk] = 0.0;
       for (int k = nk - 1; k >= 0; --k) {
         z_i[k] = z_i[k + 1] + au(i, j, k) * I_Hbbl;
       }
-      amrex::Real h_harm_arr[64];
+      amrex::Real h_harm_arr[MAX_NK];
       for (int k = 0; k < nk; ++k) h_harm_arr[k] = au(i, j, k);
 
       amrex::Real z_t = H_NEGLECT * I_Hmix;
@@ -226,12 +237,12 @@ void VertFriction::coefficients(const amrex::MultiFab &u, const amrex::MultiFab 
         z_i_kp1 = z_i_kp1 + h_harm * I_Hbbl;
       }
 
-      amrex::Real z_i[64];
+      amrex::Real z_i[MAX_NK + 1];
       z_i[nk] = 0.0;
       for (int k = nk - 1; k >= 0; --k) {
         z_i[k] = z_i[k + 1] + av(i, j, k) * I_Hbbl;
       }
-      amrex::Real h_harm_arr[64];
+      amrex::Real h_harm_arr[MAX_NK];
       for (int k = 0; k < nk; ++k) h_harm_arr[k] = av(i, j, k);
 
       amrex::Real z_t = H_NEGLECT * I_Hmix;
@@ -303,7 +314,7 @@ void VertFriction::apply(amrex::MultiFab &u, amrex::MultiFab &v, const amrex::Mu
       }
 
       // The tridiagonal solve, in MOM6's forward-elimination form.
-      amrex::Real c1[64];
+      amrex::Real c1[MAX_NK];
       amrex::Real b_denom_1 = hu(i, j, 0) + dt * au(i, j, 0);
       amrex::Real b1 = 1.0 / (b_denom_1 + dt * au(i, j, 1));
       amrex::Real d1 = b_denom_1 * b1;
@@ -342,7 +353,7 @@ void VertFriction::apply(amrex::MultiFab &u, amrex::MultiFab &v, const amrex::Mu
         surface_stress = dt_Rho0 * tauy(i, j, 0);
       }
 
-      amrex::Real c1[64];
+      amrex::Real c1[MAX_NK];
       amrex::Real b_denom_1 = hv(i, j, 0) + dt * av(i, j, 0);
       amrex::Real b1 = 1.0 / (b_denom_1 + dt * av(i, j, 1));
       amrex::Real d1 = b_denom_1 * b1;
