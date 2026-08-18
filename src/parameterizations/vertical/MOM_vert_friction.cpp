@@ -3,6 +3,7 @@
 #include "MOM_vert_friction.h"
 
 #include "MOM_fields.h"
+#include "MOM_fp_contract.h"
 #include "MOM_logger.h"
 #include "MOM_loop_boxes.h"
 
@@ -10,7 +11,6 @@ namespace MOM {
 
 namespace {
 
-constexpr amrex::Real H_NEGLECT = 1.0e-30;
 // The coupling coefficient is capped in MOM6; with the current answer date
 // the cap is effectively absent (I_amax = 0), so only a_cpl_max remains.
 constexpr amrex::Real A_CPL_MAX = 1.0e37;
@@ -112,6 +112,8 @@ void VertFriction::coefficients(const amrex::MultiFab &u, const amrex::MultiFab 
 
   const int nk = vgrid.nk();
   const amrex::Real Kv = Kv_interior;
+  // MOM6's GV%H_subroundoff; see VerticalGrid::H_subroundoff.
+  const amrex::Real H_NEGLECT = vgrid.H_subroundoff();
   const amrex::Real Kvml_invZ2 = Kvml_invZ2_;
   const amrex::Real I_Hmix = 1.0 / (Hmix_ + H_NEGLECT);
 
@@ -249,6 +251,7 @@ void VertFriction::apply(amrex::MultiFab &u, amrex::MultiFab &v, const amrex::Mu
   const int nk = vgrid.nk();
   // H_to_RZ is Rho0 in Boussinesq mode without unit scaling.
   const amrex::Real dt_Rho0 = dt / vgrid.Rho0();
+  const amrex::Real H_NEGLECT = vgrid.H_subroundoff();
   const amrex::Real Hmix = Hmix_stress_;
   const amrex::Real I_Hmix = 1.0 / Hmix;
   const bool direct_stress = direct_stress_;
@@ -277,7 +280,7 @@ void VertFriction::apply(amrex::MultiFab &u, amrex::MultiFab &v, const amrex::Mu
           const amrex::Real h_a = 0.5 * (hh(i - 1, j, k) + hh(i, j, k)) + H_NEGLECT;
           amrex::Real hfr = 1.0;
           if ((zDS + h_a) > Hmix) hfr = (Hmix - zDS) / h_a;
-          uu(i, j, k) = uu(i, j, k) + I_Hmix * hfr * stress;
+          uu(i, j, k) = uu(i, j, k) + fp_rounded(I_Hmix * hfr * stress);
           zDS += h_a;
           if (zDS >= Hmix) break;
         }
@@ -317,7 +320,7 @@ void VertFriction::apply(amrex::MultiFab &u, amrex::MultiFab &v, const amrex::Mu
           const amrex::Real h_a = 0.5 * (hh(i, j - 1, k) + hh(i, j, k)) + H_NEGLECT;
           amrex::Real hfr = 1.0;
           if ((zDS + h_a) > Hmix) hfr = (Hmix - zDS) / h_a;
-          vv(i, j, k) = vv(i, j, k) + I_Hmix * hfr * stress;
+          vv(i, j, k) = vv(i, j, k) + fp_rounded(I_Hmix * hfr * stress);
           zDS += h_a;
           if (zDS >= Hmix) break;
         }

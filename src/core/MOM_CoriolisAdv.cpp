@@ -9,11 +9,6 @@ namespace MOM {
 
 namespace {
 
-// A volume so small that it is expected to be lost in roundoff
-// [H L2 ~> m3]: GV%H_subroundoff * (1e-4 m)^2 with H_subroundoff = 1e-30 at
-// the default ANGSTROM.
-constexpr amrex::Real VOL_NEGLECT = 1.0e-30 * (1.0e-4 * 1.0e-4);
-
 } // namespace
 
 CoriolisAdv::CoriolisAdv(RuntimeParams &params) {
@@ -98,6 +93,9 @@ void CoriolisAdv::calculate(amrex::MultiFab &CAu, amrex::MultiFab &CAv,
 
   const int nk = vgrid.nk();
   const bool bound_Coriolis = bound_Coriolis_;
+  // A volume so small it is expected to be lost in roundoff [H L2 ~> m3].
+  // MOM6's vol_neglect = GV%H_subroundoff * (1e-4 m)^2.
+  const amrex::Real VOL_NEGLECT = vgrid.H_subroundoff() * (1.0e-4 * 1.0e-4);
 
   // The ocean area of an h cell [L2 ~> m2] and the sum of the four ocean areas
   // around a q point. Both are time-invariant, but MOM6 recomputes them each

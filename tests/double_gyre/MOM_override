@@ -3,17 +3,24 @@
 ! and retires when the corresponding piece lands:
 !
 !   SPLIT / USE_RK2 - the split time stepping needs the barotropic solver.
-!   PRESSUREFORCE   - the finite-volume form needs the density integrals.
+!   ANALYTIC_FV_PGF - the finite-volume form needs the density integrals.
 !   BIHARMONIC      - only the Laplacian branch of the horizontal viscosity
 !                     is implemented.
-!   DT / DT_FORCING - the unsplit scheme resolves the external gravity wave
+!   DT              - the unsplit scheme resolves the external gravity wave
 !                     explicitly, so it needs a shorter step than the split
 !                     scheme's 1200 s. MOM6 itself is unstable here at 1200 s
 !                     with SPLIT = False.
+!   DT_FORCING      - MOM6 recalculates the bottom boundary layer once per
+!                     forcing cycle, not once per dynamics step, so its answer
+!                     depends on DT_FORCING. Model::step has no notion of a
+!                     cycle and recalculates every step, which is MOM6's
+!                     behaviour when the two timesteps are equal. Setting them
+!                     equal makes the comparison one of the dynamics rather
+!                     than of the cycle bookkeeping.
 SPLIT = False
 USE_RK2 = True
-PRESSUREFORCE = "Montgomery"
+ANALYTIC_FV_PGF = False
 BIHARMONIC = False
 #override DT = 300.0
-#override DT_THERM = 600.0
-#override DT_FORCING = 600.0
+#override DT_THERM = 300.0
+#override DT_FORCING = 300.0

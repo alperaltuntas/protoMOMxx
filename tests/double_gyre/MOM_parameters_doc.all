@@ -11,7 +11,7 @@ DT = 300.0                      !   [s]
                                 ! The (baroclinic) dynamics time step.  The time-step that is actually used will
                                 ! be an integer fraction of the forcing time-step (DT_FORCING in ocean-only mode
                                 ! or the coupling timestep in coupled mode.)
-DT_THERM = 600.0                !   [s] default = 300.0
+DT_THERM = 300.0                !   [s] default = 300.0
                                 ! The thermodynamic and tracer advection time step. Ideally DT_THERM should be
                                 ! an integer multiple of DT and less than the forcing or coupling time-step,
                                 ! unless THERMO_SPANS_COUPLING is true, in which case DT_THERM can be an integer
@@ -153,10 +153,11 @@ VELOCITY_CONFIG = "zero"        ! default = "zero"
                                 !    USER - call a user modified routine.
 
 ! === module MOM_PressureForce ===
-PRESSUREFORCE = "Montgomery"    ! default = "FV"
-                                ! Pressure force scheme.  Options are:
-                                !    FV - finite volume, with analytic integration
-                                !    Montgomery - Montgomery potential form
+ANALYTIC_FV_PGF = False         ! default = True
+                                ! If true the pressure gradient forces are calculated with a finite volume form
+                                ! that analytically integrates the equations of state in pressure to avoid any
+                                ! possibility of numerical thermobaric instability, as described in Adcroft et
+                                ! al., O. Mod. (2008).
 
 ! === module MOM_CoriolisAdv ===
 NOSLIP = False                  ! default = False
@@ -330,7 +331,7 @@ UNSPLIT_DT_VISC_BUG = False     ! default = False
                                 ! unsplit_RK2.  If true, an older incorrect value is used.
 
 ! === module MOM_main (MOM_driver) ===
-DT_FORCING = 600.0              !   [s] default = 300.0
+DT_FORCING = 300.0              !   [s] default = 300.0
                                 ! The time step for changing forcing, coupling with other components, or
                                 ! potentially writing certain diagnostics. The default value is given by DT.
 TIMEUNIT = 8.64e+04             !   [s] default = 8.64e+04

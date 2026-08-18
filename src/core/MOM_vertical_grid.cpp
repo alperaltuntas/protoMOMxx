@@ -1,7 +1,9 @@
+#include <algorithm>
 #include <string>
 
-#include "MOM_logger.h"
 #include "MOM_vertical_grid.h"
+
+#include "MOM_logger.h"
 
 namespace MOM {
 
@@ -98,9 +100,17 @@ VerticalGrid::VerticalGrid(RuntimeParams &params) {
     logger::fatal("VerticalGrid: ANGSTROM must not be negative.");
   }
 
+  // MOM6's GV%H_subroundoff and GV%dZ_subroundoff. The literal 1e-30 that
+  // these evaluate to at the default Angstrom is not the same double: the
+  // product 1e-20 * 1e-10 rounds one bit below the decimal constant, and the
+  // difference is visible wherever the value is added to a vanishing layer
+  // thickness. H_to_m and Z_to_m are both 1 in Boussinesq mode.
+  H_subroundoff_ = 1.0e-20 * std::max(angstrom_, 1.0e-17);
+  dZ_subroundoff_ = 1.0e-20 * std::max(angstrom_, 1.0e-17);
+
   // defer: the remaining verticalGridInit content. SEMI_BOUSSINESQ and
   //        RHO_KV_CONVERT (both only meaningful when BOUSSINESQ is false,
-  //        which aborts above), the subroundoff thicknesses,
+  //        which aborts above),
   //        and H_RESCALE_POWER with the thickness-unit conversion factor
   //        family (H_to_m, Z_to_H, ...), all of which will be implemented
   //        with the thickness/units layer, and the mixed-layer layer counts

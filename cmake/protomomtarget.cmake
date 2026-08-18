@@ -14,7 +14,9 @@ function(add_amrex_to_protomom_target PROTOMOM_TARGET)
   # floating-point contraction must match the Fortran side of the comparison.
   # GCC and Clang contract a*b+c into an FMA at -O by default, and so does
   # gfortran, so the default here is to leave contraction on. Turning it off
-  # in C++ alone changes answers away from a stock MOM6 build.
+  # in C++ alone changes answers away from a stock MOM6 build. Where the two
+  # compilers disagree about a particular expression, the fix is local rather
+  # than build-wide; see MOM_fp_contract.h.
   if(PROTOMOM_NO_FP_CONTRACT)
     target_compile_options(${PROTOMOM_TARGET} PRIVATE
       $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>

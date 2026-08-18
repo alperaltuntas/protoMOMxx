@@ -14,18 +14,19 @@ PressureForce::PressureForce(RuntimeParams &params) {
 
   params.doc_module("MOM_PressureForce", "");
 
-  std::string form = "FV";
-  params.get("PRESSUREFORCE", form,
-             {.default_value = std::string("FV"),
-              .desc = "Pressure force scheme.  Options are:\n"
-                      "\t FV - finite volume, with analytic integration\n"
-                      "\t Montgomery - Montgomery potential form"});
+  bool analytic_FV_PGF = true;
+  params.get("ANALYTIC_FV_PGF", analytic_FV_PGF,
+             {.default_value = true,
+              .desc = "If true the pressure gradient forces are calculated with a finite "
+                      "volume form that analytically integrates the equations of state in "
+                      "pressure to avoid any possibility of numerical thermobaric "
+                      "instability, as described in Adcroft et al., O. Mod. (2008)."});
 
-  if (form != "Montgomery") {
+  if (analytic_FV_PGF) {
     // defer: the finite-volume pressure force (MOM_PressureForce_FV), which
     //        is MOM6's default and needs the density integrals.
-    logger::fatal("PressureForce: PRESSUREFORCE \"", form,
-                  "\" is not implemented yet; only \"Montgomery\" is.");
+    logger::fatal("PressureForce: ANALYTIC_FV_PGF = True is not implemented yet; "
+                  "only the Montgomery potential form is.");
   }
 }
 

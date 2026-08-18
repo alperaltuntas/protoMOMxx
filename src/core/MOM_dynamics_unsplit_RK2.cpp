@@ -131,6 +131,11 @@ void DynamicsUnsplitRK2::step(State &state, const MechForcing &forces, const amr
   debug::report_field(v, "Start Predictor v");
   debug::report_field(h, "Start Predictor h");
 
+  // The bottom boundary layer properties, from the state at the start of the
+  // step. MOM6 calls this from step_MOM, before the time stepping scheme; it
+  // sits here because the viscosity fields are owned by this class.
+  set_visc_.set_viscous_BBL(visc_, u, v, h, domain, grid, vgrid);
+
   // diffu, diffv: the horizontal viscosity at the start of the step.
   hor_visc_.calculate(diffu_, diffv_, u, v, h, domain, grid, vgrid);
 
@@ -154,12 +159,10 @@ void DynamicsUnsplitRK2::step(State &state, const MechForcing &forces, const amr
   debug::report_field(PFv_, "Predictor 1 accel PFv");
   debug::report_field(diffu_, "Predictor 1 accel diffu");
   debug::report_field(diffv_, "Predictor 1 accel diffv");
-
   // The predictor velocities, up = u + BE*dt*(PF + CA + diff).
   accelerate(up_, u, PFu_, CAu_, diffu_, grid.mask2dCu(), dt_pred, nk, true);
   accelerate(vp_, v, PFv_, CAv_, diffv_, grid.mask2dCv(), dt_pred, nk, false);
 
-  set_visc_.set_viscous_BBL(visc_, u, v, h_av_, domain, grid, vgrid);
   vert_friction_.coefficients(up_, vp_, h_av_, visc_, set_visc_.Kv(), domain, grid, vgrid);
   vert_friction_.apply(up_, vp_, h_av_, forces, dt_pred, domain, grid, vgrid);
 
@@ -206,6 +209,9 @@ void DynamicsUnsplitRK2::step(State &state, const MechForcing &forces, const amr
   debug::report_field(u, "Corrector u");
   debug::report_field(v, "Corrector v");
   debug::report_field(h, "Corrector h");
+  debug::report_field(uh_, "Corrector uh");
+  debug::report_field(vh_, "Corrector vh");
+  debug::report_field(up_, "Corrector up");
 }
 
 } // namespace MOM

@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include "MOM_continuity_PPM.h"
 
 #include "MOM_logger.h"
@@ -19,11 +21,17 @@ void ppm_limit_pos(amrex::Real &h_L, amrex::Real &h_R, const amrex::Real h_in,
       if (h_in <= h_min) {
         h_L = h_in;
         h_R = h_in;
-      } else if (12.0 * curv * (h_in - h_min) < (curv * curv + 3.0 * dh * dh)) {
-        const amrex::Real scale =
-            12.0 * curv * (h_in - h_min) / (curv * curv + 3.0 * dh * dh);
-        h_L = h_in + scale * (h_L - h_in);
-        h_R = h_in + scale * (h_R - h_in);
+      } else {
+        // This file is compiled without floating-point contraction, because
+        // gfortran leaves MOM6's continuity solver unfused everywhere except
+        // these two expressions, which are written out as fused
+        // multiply-adds.
+        const amrex::Real bound = std::fma(curv, curv, 3.0 * dh * dh);
+        if (12.0 * curv * (h_in - h_min) < bound) {
+          const amrex::Real scale = 12.0 * curv * (h_in - h_min) / bound;
+          h_L = std::fma(scale, h_L - h_in, h_in);
+          h_R = std::fma(scale, h_R - h_in, h_in);
+        }
       }
     }
   }
@@ -194,7 +202,8 @@ void ContinuityPPM::solve(amrex::MultiFab &h, amrex::MultiFab &uh, amrex::MultiF
                                dy_Cu(i, j, 0), IdxT(i - 1, j, 0), IdxT(i, j, 0), dt);
     });
 
-    // continuity_zonal_convergence, with hin present so h_min is zero here.
+    // continuity_zonal_convergence. MOM6 floors the updated thickness at one
+    // Angstrom in both passes, not at zero.
     const amrex::Array4<amrex::Real> hh = h.array(mfi);
     const amrex::Array4<const amrex::Real> IareaT = grid.IareaT().const_array(mfi);
     amrex::Box cell_bx = lb;
@@ -203,7 +212,7 @@ void ContinuityPPM::solve(amrex::MultiFab &h, amrex::MultiFab &uh, amrex::MultiF
     amrex::ParallelFor(cell_bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
       hh(i, j, k) = amrex::max(hi(i, j, k) - dt * IareaT(i, j, 0) *
                                                  (uuh(i + 1, j, k) - uuh(i, j, k)),
-                               amrex::Real(0.0));
+                               h_min);
     });
   }
 
@@ -250,7 +259,7 @@ void ContinuityPPM::solve(amrex::MultiFab &h, amrex::MultiFab &uh, amrex::MultiF
                                dx_Cv(i, j, 0), IdyT(i, j - 1, 0), IdyT(i, j, 0), dt);
     });
 
-    // continuity_merdional_convergence, with hmin = Angstrom.
+    // continuity_merdional_convergence, on the zonally updated thicknesses.
     const amrex::Array4<amrex::Real> hh = h.array(mfi);
     const amrex::Array4<const amrex::Real> IareaT = grid.IareaT().const_array(mfi);
     amrex::Box cell_bx = lb;

@@ -61,6 +61,17 @@ public:
   /// @return The minimum layer thickness.
   amrex::Real angstrom() const { return angstrom_; }
 
+  /// @brief A thickness so small it is usually lost in roundoff [H ~> m].
+  /// MOM6's GV%H_subroundoff. It is not the literal 1e-30: it is
+  /// 1e-20 * max(Angstrom, 1e-17), which differs from 1e-30 in the last bit
+  /// and shows up wherever it is added to a vanishing layer thickness.
+  /// @return The negligible thickness.
+  amrex::Real H_subroundoff() const { return H_subroundoff_; }
+
+  /// @brief The same in depth units [Z ~> m]. MOM6's GV%dZ_subroundoff.
+  /// @return The negligible vertical distance.
+  amrex::Real dZ_subroundoff() const { return dZ_subroundoff_; }
+
   /// @brief Reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
   /// The bottom value (index nk) does not matter physically and is set only
   /// to avoid an uninitialized value in output, as in MOM6.
@@ -79,6 +90,8 @@ private:
   amrex::Real Rho0_ = 0.0;            ///< Boussinesq reference density [R ~> kg m-3].
   bool Boussinesq_ = true;            ///< Whether the Boussinesq approximation is made.
   amrex::Real angstrom_ = 0.0;        ///< The minimum layer thickness [H ~> m].
+  amrex::Real H_subroundoff_ = 0.0;   ///< A negligible thickness [H ~> m].
+  amrex::Real dZ_subroundoff_ = 0.0;  ///< A negligible vertical distance [Z ~> m].
   std::vector<amrex::Real> g_prime_;  ///< Interface reduced gravities (nk+1) [L2 Z-1 T-2 ~> m s-2].
   std::vector<amrex::Real> Rlay_;     ///< Layer target densities (nk) [R ~> kg m-3].
 };

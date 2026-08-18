@@ -9,8 +9,6 @@ namespace MOM {
 
 namespace {
 
-constexpr amrex::Real H_NEGLECT = 1.0e-30;
-
 // Reject a parameter that selects an unimplemented branch.
 void reject_if_set(RuntimeParams &params, const std::string &key, const bool default_value,
                    const std::string &desc) {
@@ -123,6 +121,8 @@ void SetViscosity::set_viscous_BBL(VertVisc &visc, const amrex::MultiFab &u,
 
   const int nk = vgrid.nk();
   const amrex::Real cdrag_sqrt = std::sqrt(cdrag_);
+  // MOM6's GV%H_subroundoff; see VerticalGrid::H_subroundoff.
+  const amrex::Real H_NEGLECT = vgrid.H_subroundoff();
   // With LINEAR_DRAG the friction velocity does not depend on the flow.
   const amrex::Real ustar = cdrag_sqrt * drag_bg_vel_;
   const amrex::Real Rho0x400_G = 400.0 * (vgrid.Rho0() / vgrid.g_Earth());

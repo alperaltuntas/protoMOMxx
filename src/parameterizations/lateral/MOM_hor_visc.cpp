@@ -11,7 +11,6 @@ namespace {
 
 // A thickness so small it is lost in roundoff [H ~> m]: MOM6's
 // GV%H_subroundoff at the default ANGSTROM.
-constexpr amrex::Real H_NEGLECT = 1.0e-30;
 
 // Abort if a parameter selects a branch that is not implemented.
 void reject_if_set(RuntimeParams &params, const std::string &key, const bool default_value,
@@ -272,7 +271,9 @@ void HorizontalViscosity::calculate(amrex::MultiFab &diffu, amrex::MultiFab &dif
   const bool smag = Smagorinsky_Kh_;
   const bool bound = bound_Kh_;
   const amrex::Real Kh_bg_min = Kh_bg_min_;
-  constexpr amrex::Real h_neglect3 = H_NEGLECT * H_NEGLECT * H_NEGLECT;
+  // MOM6's GV%H_subroundoff; see VerticalGrid::H_subroundoff.
+  const amrex::Real H_NEGLECT = vgrid.H_subroundoff();
+  const amrex::Real h_neglect3 = H_NEGLECT * H_NEGLECT * H_NEGLECT;
 
   // Per-layer work fields.
   amrex::MultiFab sh_xx = domain.make_field(Stagger::Cell, 1, 1);
@@ -410,10 +411,15 @@ void HorizontalViscosity::calculate(amrex::MultiFab &diffu, amrex::MultiFab &dif
       const amrex::Array4<const amrex::Real> IareaCu = grid.IareaCu().const_array(mfi);
       amrex::ParallelFor(loops::flat(loops::u_points(valid)),
                          [=] AMREX_GPU_DEVICE(int i, int j, int) {
-        du(i, j, k) = ((IdxCu(i, j, 0) * ((dx2q(i, j, 0) * sxy(i, j, 0)) -
-                                          (dx2q(i, j + 1, 0) * sxy(i, j + 1, 0))) +
-                        IdyCu(i, j, 0) * ((dy2h(i - 1, j, 0) * sxx(i - 1, j, 0)) -
-                                          (dy2h(i, j, 0) * sxx(i, j, 0)))) *
+        // This file is compiled without floating-point contraction, because
+        // gfortran leaves MOM6's horizontal viscosity unfused everywhere its
+        // intermediates pass through an array. The one place it does contract
+        // is the outer sum here, so that fused multiply-add is written out.
+        const amrex::Real d_xy = (dx2q(i, j, 0) * sxy(i, j, 0)) -
+                                 (dx2q(i, j + 1, 0) * sxy(i, j + 1, 0));
+        const amrex::Real d_xx = (dy2h(i - 1, j, 0) * sxx(i - 1, j, 0)) -
+                                 (dy2h(i, j, 0) * sxx(i, j, 0));
+        du(i, j, k) = (std::fma(IdxCu(i, j, 0), d_xy, IdyCu(i, j, 0) * d_xx) *
                        IareaCu(i, j, 0)) / (hu(i, j, 0) + H_NEGLECT);
       });
 
@@ -423,10 +429,11 @@ void HorizontalViscosity::calculate(amrex::MultiFab &diffu, amrex::MultiFab &dif
       const amrex::Array4<const amrex::Real> IareaCv = grid.IareaCv().const_array(mfi);
       amrex::ParallelFor(loops::flat(loops::v_points(valid)),
                          [=] AMREX_GPU_DEVICE(int i, int j, int) {
-        dv(i, j, k) = ((IdyCv(i, j, 0) * ((dy2q(i, j, 0) * sxy(i, j, 0)) -
-                                          (dy2q(i + 1, j, 0) * sxy(i + 1, j, 0))) -
-                        IdxCv(i, j, 0) * ((dx2h(i, j - 1, 0) * sxx(i, j - 1, 0)) -
-                                          (dx2h(i, j, 0) * sxx(i, j, 0)))) *
+        const amrex::Real d_xy = (dy2q(i, j, 0) * sxy(i, j, 0)) -
+                                 (dy2q(i + 1, j, 0) * sxy(i + 1, j, 0));
+        const amrex::Real d_xx = (dx2h(i, j - 1, 0) * sxx(i, j - 1, 0)) -
+                                 (dx2h(i, j, 0) * sxx(i, j, 0));
+        dv(i, j, k) = (std::fma(IdyCv(i, j, 0), d_xy, -(IdxCv(i, j, 0) * d_xx)) *
                        IareaCv(i, j, 0)) / (hv(i, j, 0) + H_NEGLECT);
       });
     }

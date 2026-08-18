@@ -6,11 +6,6 @@ DT = 300.0                      !   [s]
                                 ! The (baroclinic) dynamics time step.  The time-step that is actually used will
                                 ! be an integer fraction of the forcing time-step (DT_FORCING in ocean-only mode
                                 ! or the coupling timestep in coupled mode.)
-DT_THERM = 600.0                !   [s] default = 300.0
-                                ! The thermodynamic and tracer advection time step. Ideally DT_THERM should be
-                                ! an integer multiple of DT and less than the forcing or coupling time-step,
-                                ! unless THERMO_SPANS_COUPLING is true, in which case DT_THERM can be an integer
-                                ! multiple of the coupling timestep.  By default DT_THERM is set to DT.
 SPLIT = False                   ! default = True
                                 ! Use the split time stepping if true.
 USE_RK2 = True                  ! default = False
@@ -90,10 +85,11 @@ GINT = 0.0098                   !   [m s-2]
 ! === module MOM_state_initialization ===
 
 ! === module MOM_PressureForce ===
-PRESSUREFORCE = "Montgomery"    ! default = "FV"
-                                ! Pressure force scheme.  Options are:
-                                !    FV - finite volume, with analytic integration
-                                !    Montgomery - Montgomery potential form
+ANALYTIC_FV_PGF = False         ! default = True
+                                ! If true the pressure gradient forces are calculated with a finite volume form
+                                ! that analytically integrates the equations of state in pressure to avoid any
+                                ! possibility of numerical thermobaric instability, as described in Adcroft et
+                                ! al., O. Mod. (2008).
 
 ! === module MOM_CoriolisAdv ===
 BOUND_CORIOLIS = True           ! default = False
@@ -156,9 +152,6 @@ HMIX_FIXED = 20.0               !   [m]
 ! === module MOM_dynamics_unsplit_RK2 ===
 
 ! === module MOM_main (MOM_driver) ===
-DT_FORCING = 600.0              !   [s] default = 300.0
-                                ! The time step for changing forcing, coupling with other components, or
-                                ! potentially writing certain diagnostics. The default value is given by DT.
 DAYMAX = 10.0                   !   [days]
                                 ! The final time of the whole simulation, in units of TIMEUNIT seconds.  This
                                 ! also sets the potential end time of the present run segment if the end time is
