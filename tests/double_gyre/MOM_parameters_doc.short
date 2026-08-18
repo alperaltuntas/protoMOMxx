@@ -164,3 +164,10 @@ WIND_CONFIG = "2gyre"           ! default = "zero"
                                 ! The character string that indicates how wind forcing is specified.  Valid
                                 ! options include (file), (data_override), (2gyre), (1gyre), (gyres), (zero),
                                 ! (const), (Neverworld), (scurves), (ideal_hurr), (SCM_CVmix_tests) and (USER).
+
+! === module MOM_sum_output ===
+MAXVEL = 6.0                    !   [m s-1] default = 3.0e+08
+                                ! The maximum velocity allowed before the velocity components are truncated.
+DEPTH_LIST_MIN_INC = 1.0e-06    !   [m] default = 1.0e-10
+                                ! The minimum increment between the depths of the entries in the depth-list
+                                ! file.

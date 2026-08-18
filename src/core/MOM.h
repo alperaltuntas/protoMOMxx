@@ -72,6 +72,12 @@ public:
   /// @param n_steps The number of dynamics steps in the interval.
   void step(const MechForcing &forces, amrex::Real dt_forcing, int n_steps);
 
+  /// @brief The number of velocity truncations since the last call, and reset
+  /// the count. The analogue of MOM6's CS%ntrunc, which initialize_MOM hands
+  /// to MOM_sum_output_init as a target.
+  /// @return The truncation count.
+  int take_truncations();
+
 private:
   // config_ initialization must precede domain_: its initializer sets the log 
   // verbosity in effect for the later initializers' messages.

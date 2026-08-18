@@ -112,6 +112,8 @@ void Model::step(const MechForcing &forces, const amrex::Real dt_forcing,
   }
 }
 
+int Model::take_truncations() { return dynamics_->take_truncations(); }
+
 void Model::initialize_dynamics(RuntimeParams &params) {
 
   // MOM6's four-way initialize_dyn_* branch. Only the unsplit RK2 scheme

@@ -311,6 +311,16 @@ KV_ML_INVZ2 = 0.01              !   [m2 s-1] default = 0.01
                                 ! An extra kinematic viscosity in a region near the top of the ocean, typically
                                 ! of the mixed layer, that decays away with the square of the distance from the
                                 ! surface.
+CFL_TRUNCATE = 0.5              !   [nondim] default = 0.5
+                                ! The value of the CFL number that will cause velocity components to be
+                                ! truncated; instability can occur past 0.5.
+CFL_TRUNCATE_RAMP_TIME = 0.0    !   [s] default = 0.0
+                                ! The time over which the CFL truncation value is ramped up at the beginning of
+                                ! the run.
+VEL_UNDERFLOW = 0.0             !   [m s-1] default = 0.0
+                                ! A negligibly small velocity magnitude below which velocity components are set
+                                ! to 0.  A reasonable value might be 1e-30 m/s, which is 1e-47 of the speed of
+                                ! light.
 
 ! === module MOM_dynamics_unsplit_RK2 ===
 BE = 0.6                        !   [nondim] default = 0.6
@@ -350,3 +360,34 @@ WIND_CONFIG = "2gyre"           ! default = "zero"
                                 ! (const), (Neverworld), (scurves), (ideal_hurr), (SCM_CVmix_tests) and (USER).
 TAUX_MAGNITUDE = 0.1            !   [Pa] default = 0.1
                                 ! The magnitude of the wind stress.
+
+! === module MOM_sum_output ===
+CALCULATE_APE = True            ! default = True
+                                ! If true, calculate the available potential energy of the interfaces. Setting
+                                ! this to false reduces the memory footprint of high-PE-count models
+                                ! dramatically.
+WRITE_STOCKS = True             ! default = True
+                                ! If true, write the integrated tracer amounts to stdout when the energy files
+                                ! are written.
+MAXTRUNC = 0                    !   [truncations save_interval-1] default = 0
+                                ! The run will be stopped, and the day set to a very large value if the velocity
+                                ! is truncated more than MAXTRUNC times between energy saves. Set MAXTRUNC to 0
+                                ! to stop if there is any truncation of velocities.
+MAX_ENERGY = 0.0                !   [m2 s-2] default = 0.0
+                                ! The maximum permitted average energy per unit mass; the model will be stopped
+                                ! if there is more energy than this.  If zero or negative, this is set to
+                                ! 10*MAXVEL^2.
+MAXVEL = 6.0                    !   [m s-1] default = 3.0e+08
+                                ! The maximum velocity allowed before the velocity components are truncated.
+ENERGYFILE = "ocean.stats"      ! default = "ocean.stats"
+                                ! The file to use to write the energies and globally summed diagnostics.
+DEPTH_LIST_MIN_INC = 1.0e-06    !   [m] default = 1.0e-10
+                                ! The minimum increment between the depths of the entries in the depth-list
+                                ! file.
+ENERGYSAVEDAYS = 1.0            !   [days] default = 1.0
+                                ! The interval in units of TIMEUNIT between saves of the energies of the run and
+                                ! other globally summed diagnostics.
+ENERGYSAVEDAYS_GEOMETRIC = 0.0  !   [days] default = 0.0
+                                ! The starting interval in units of TIMEUNIT for the first call to save the
+                                ! energies of the run and other globally summed diagnostics. The interval
+                                ! increases by a factor of 2. after each call to write_energy.

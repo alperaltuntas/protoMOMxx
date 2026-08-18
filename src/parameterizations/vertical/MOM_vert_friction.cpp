@@ -11,6 +11,7 @@ namespace MOM {
 
 namespace {
 
+
 // The coupling coefficient is capped in MOM6; with the current answer date
 // the cap is effectively absent (I_amax = 0), so only a_cpl_max remains.
 constexpr amrex::Real A_CPL_MAX = 1.0e37;
@@ -84,16 +85,29 @@ VertFriction::VertFriction(RuntimeParams &params, const Domain &domain,
                       "distance from the surface.",
               .units = "m2 s-1"});
 
-  // The velocity truncation is not implemented; a run that would trigger it is
-  // already unstable, and MOM6 reports the truncations rather than relying on
-  // them silently.
-  amrex::Real maxvel = 3.0e8;
-  params.get("MAXVEL", maxvel,
-             {.default_value = 3.0e8,
-              .desc = "The maximum velocity allowed before the velocity components are "
-                      "truncated.",
-              .units = "m s-1",
-              .do_not_log = true});
+  params.get("CFL_TRUNCATE", CFL_trunc_,
+             {.default_value = 0.5,
+              .desc = "The value of the CFL number that will cause velocity components to be "
+                      "truncated; instability can occur past 0.5.",
+              .units = "nondim"});
+
+  amrex::Real ramp_time = 0.0;
+  params.get("CFL_TRUNCATE_RAMP_TIME", ramp_time,
+             {.default_value = 0.0,
+              .desc = "The time over which the CFL truncation value is ramped up at the "
+                      "beginning of the run.",
+              .units = "s"});
+  if (ramp_time > 0.0) {
+    // defer: the ramped truncation threshold.
+    logger::fatal("VertFriction: CFL_TRUNCATE_RAMP_TIME > 0 is not implemented yet.");
+  }
+
+  params.get("VEL_UNDERFLOW", vel_underflow_,
+             {.default_value = 0.0,
+              .desc = "A negligibly small velocity magnitude below which velocity components "
+                      "are set to 0.  A reasonable value might be 1e-30 m/s, which is 1e-47 "
+                      "of the speed of light.",
+              .units = "m s-1"});
 
   a_u_ = make_interface_field(domain, vgrid, Stagger::XFace);
   a_v_ = make_interface_field(domain, vgrid, Stagger::YFace);
@@ -246,7 +260,7 @@ void VertFriction::coefficients(const amrex::MultiFab &u, const amrex::MultiFab 
 void VertFriction::apply(amrex::MultiFab &u, amrex::MultiFab &v, const amrex::MultiFab &h,
                          const MechForcing &forces, const amrex::Real dt,
                          const Domain &domain, const Grid &grid,
-                         const VerticalGrid &vgrid) const {
+                         const VerticalGrid &vgrid) {
 
   const int nk = vgrid.nk();
   // H_to_RZ is Rho0 in Boussinesq mode without unit scaling.
@@ -346,8 +360,71 @@ void VertFriction::apply(amrex::MultiFab &u, amrex::MultiFab &v, const amrex::Mu
     });
   }
 
+  limit_velocity(u, v, dt, grid, vgrid);
+
   u.FillBoundary(domain.periodicity());
   v.FillBoundary(domain.periodicity());
+}
+
+void VertFriction::limit_velocity(amrex::MultiFab &u, amrex::MultiFab &v, const amrex::Real dt,
+                                  const Grid &grid, const VerticalGrid &vgrid) {
+
+  const int nk = vgrid.nk();
+  const amrex::Real CFL_trunc = CFL_trunc_;
+  const amrex::Real vel_underflow = vel_underflow_;
+  // Truncations in layers thinner than this are not counted, because they
+  // carry no momentum worth reporting.
+  const amrex::Real H_report = 3.0 * vgrid.angstrom();
+
+  for (amrex::MFIter mfi(u); mfi.isValid(); ++mfi) {
+    const amrex::Box valid = mfi.validbox();
+    const amrex::Array4<amrex::Real> uu = u.array(mfi);
+    const amrex::Array4<const amrex::Real> hu = h_u_.const_array(mfi);
+    const amrex::Array4<const amrex::Real> dy_Cu = grid.dy_Cu().const_array(mfi);
+    const amrex::Array4<const amrex::Real> areaT = grid.areaT().const_array(mfi);
+    const amrex::Array4<const amrex::Real> IareaT = grid.IareaT().const_array(mfi);
+    const amrex::Box bx = loops::u_points(valid);
+    for (int k = 0; k < nk; ++k) {
+      for (int j = bx.smallEnd(1); j <= bx.bigEnd(1); ++j) {
+        for (int i = bx.smallEnd(0); i <= bx.bigEnd(0); ++i) {
+          if (std::abs(uu(i, j, k)) < vel_underflow) {
+            uu(i, j, k) = 0.0;
+          } else if ((uu(i, j, k) * (dt * dy_Cu(i, j, 0))) * IareaT(i, j, 0) < -CFL_trunc) {
+            uu(i, j, k) = (-0.9 * CFL_trunc) * (areaT(i, j, 0) / (dt * dy_Cu(i, j, 0)));
+            if (hu(i, j, k) > H_report) ++ntrunc_;
+          } else if ((uu(i, j, k) * (dt * dy_Cu(i, j, 0))) * IareaT(i - 1, j, 0) > CFL_trunc) {
+            uu(i, j, k) = (0.9 * CFL_trunc) * (areaT(i - 1, j, 0) / (dt * dy_Cu(i, j, 0)));
+            if (hu(i, j, k) > H_report) ++ntrunc_;
+          }
+        }
+      }
+    }
+  }
+
+  for (amrex::MFIter mfi(v); mfi.isValid(); ++mfi) {
+    const amrex::Box valid = mfi.validbox();
+    const amrex::Array4<amrex::Real> vv = v.array(mfi);
+    const amrex::Array4<const amrex::Real> hv = h_v_.const_array(mfi);
+    const amrex::Array4<const amrex::Real> dx_Cv = grid.dx_Cv().const_array(mfi);
+    const amrex::Array4<const amrex::Real> areaT = grid.areaT().const_array(mfi);
+    const amrex::Array4<const amrex::Real> IareaT = grid.IareaT().const_array(mfi);
+    const amrex::Box bx = loops::v_points(valid);
+    for (int k = 0; k < nk; ++k) {
+      for (int j = bx.smallEnd(1); j <= bx.bigEnd(1); ++j) {
+        for (int i = bx.smallEnd(0); i <= bx.bigEnd(0); ++i) {
+          if (std::abs(vv(i, j, k)) < vel_underflow) {
+            vv(i, j, k) = 0.0;
+          } else if ((vv(i, j, k) * (dt * dx_Cv(i, j, 0))) * IareaT(i, j, 0) < -CFL_trunc) {
+            vv(i, j, k) = (-0.9 * CFL_trunc) * (areaT(i, j, 0) / (dt * dx_Cv(i, j, 0)));
+            if (hv(i, j, k) > H_report) ++ntrunc_;
+          } else if ((vv(i, j, k) * (dt * dx_Cv(i, j, 0))) * IareaT(i, j - 1, 0) > CFL_trunc) {
+            vv(i, j, k) = (0.9 * CFL_trunc) * (areaT(i, j - 1, 0) / (dt * dx_Cv(i, j, 0)));
+            if (hv(i, j, k) > H_report) ++ntrunc_;
+          }
+        }
+      }
+    }
+  }
 }
 
 } // namespace MOM

@@ -9,6 +9,7 @@ add_library(MOM_src_framework
   MOM_document.cpp
   MOM_domains.cpp
   MOM_clock.cpp
+  MOM_coms.cpp
   MOM_debug_dump.cpp
 )
 

@@ -46,6 +46,12 @@ public:
   DynamicsUnsplitRK2(RuntimeParams &params, amrex::Real dt, const Domain &domain,
                      const Grid &grid, const VerticalGrid &vgrid);
 
+  /// @brief The number of velocity truncations since the last call, and reset
+  /// the count. MOM6 shares the same counter between set_visc and
+  /// MOM_sum_output through a pointer.
+  /// @return The truncation count.
+  int take_truncations() { return vert_friction_.take_truncations(); }
+
   /// @brief Advance the state one dynamics step. The analogue of MOM6's
   /// step_MOM_dyn_unsplit_RK2.
   /// @param state The prognostic state, updated in place.

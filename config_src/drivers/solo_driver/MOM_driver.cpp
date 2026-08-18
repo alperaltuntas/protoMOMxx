@@ -15,6 +15,7 @@
 #include "MOM_directories.h"
 #include "MOM_infra.h"
 #include "MOM_logger.h"
+#include "MOM_sum_output.h"
 #include "MOM_surface_forcing.h"
 
 /// @brief Main entry point for the protoMOMxx driver program.
@@ -58,6 +59,12 @@ int main(int argc, char* argv[]) {
     const MOM::SurfaceForcing surface_forcing(model.grid(), params);
     MOM::MechForcing forces(model.domain());
 
+    // The globally summed diagnostics written to ocean.stats. Constructed
+    // after the Model, as in MOM6, where MOM_sum_output_init runs inside
+    // initialize_MOM once the grid and the vertical grid exist.
+    MOM::SumOutput sum_output(params, model.domain(), model.grid(), model.vertical_grid(),
+                              directories.output_directory());
+
     // defer: MOM_wave_interface_init(), data_override_init(), ice shelf hooks
 
     // Parity scaffolding: with DEBUG set, dump the fixed fields so they can be
@@ -94,11 +101,17 @@ int main(int argc, char* argv[]) {
     const double loop_start = amrex::second();
     int dyn_steps = 0;
 
+    sum_output.write_energy(model.state(), model.domain(), model.grid(), model.vertical_grid(),
+                            clock.time(), dyn_steps, clock.dt_forcing());
+
     while (!clock.done()) {
       surface_forcing.set_forcing(forces, clock.time());
       model.step(forces, clock.dt_forcing(), clock.steps_per_forcing());
       dyn_steps += clock.steps_per_forcing();
+      sum_output.add_truncations(model.take_truncations());
       clock.advance();
+      sum_output.write_energy(model.state(), model.domain(), model.grid(), model.vertical_grid(),
+                              clock.time(), dyn_steps, clock.dt_forcing());
     }
 
     const double loop_seconds = amrex::second() - loop_start;
