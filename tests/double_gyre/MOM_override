@@ -1,1 +1,19 @@
-! Blank file in which we can put "overrides" for parameters
+! Overrides that select the parts of the double_gyre configuration protoMOMxx
+! implements. Each of these is a deliberate deviation from the MOM6 testcase
+! and retires when the corresponding piece lands:
+!
+!   SPLIT / USE_RK2 - the split time stepping needs the barotropic solver.
+!   PRESSUREFORCE   - the finite-volume form needs the density integrals.
+!   BIHARMONIC      - only the Laplacian branch of the horizontal viscosity
+!                     is implemented.
+!   DT / DT_FORCING - the unsplit scheme resolves the external gravity wave
+!                     explicitly, so it needs a shorter step than the split
+!                     scheme's 1200 s. MOM6 itself is unstable here at 1200 s
+!                     with SPLIT = False.
+SPLIT = False
+USE_RK2 = True
+PRESSUREFORCE = "Montgomery"
+BIHARMONIC = False
+#override DT = 300.0
+#override DT_THERM = 600.0
+#override DT_FORCING = 600.0

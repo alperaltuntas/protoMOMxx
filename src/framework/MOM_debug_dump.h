@@ -19,4 +19,26 @@ namespace MOM::debug {
 /// @param comp The component to dump.
 void dump_field(const amrex::MultiFab &mf, const std::string &name, int comp = 0);
 
+/// @brief Log a field's mean, minimum, maximum and bit-count checksum over
+/// the same points MOM6's chksum routines use, so the two logs can be diffed
+/// stage by stage.
+///
+/// MOM6 reports a velocity field over its non-symmetric range: I = isc..iec
+/// for a u point, which is AMReX face index 1..NI, so the western boundary
+/// face is left out. The ranges here reproduce that, and the checksum is
+/// MOM6's: the sum over the reported points of the population count of the
+/// absolute value's bit pattern, modulo 1e9.
+/// @param mf The field to report.
+/// @param name The label to print.
+/// @param comp The component to report.
+void report_field(const amrex::MultiFab &mf, const std::string &name, int comp = 0);
+
+/// @brief Whether the stage-by-stage reporting is on.
+/// @return True if reporting is enabled.
+bool reporting();
+
+/// @brief Turn the stage-by-stage reporting on or off.
+/// @param on Whether to report.
+void set_reporting(bool on);
+
 } // namespace MOM::debug

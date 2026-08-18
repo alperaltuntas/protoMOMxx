@@ -108,6 +108,11 @@ struct GridFields {
   amrex::MultiFab areaCv;    ///< The area of a v-cell [L2 ~> m2].
   amrex::MultiFab IareaCu;   ///< The masked 1/areaCu at u points [L-2 ~> m-2].
   amrex::MultiFab IareaCv;   ///< The masked 1/areaCv at v points [L-2 ~> m-2].
+  amrex::MultiFab IdxCu_OBCmask;  ///< IdxCu masked by the u-point open-boundary
+                                  ///< mask [L-1 ~> m-1]. With no open boundaries
+                                  ///< that mask is the land/sea mask.
+  amrex::MultiFab IdyCv_OBCmask;  ///< IdyCv masked by the v-point open-boundary
+                                  ///< mask [L-1 ~> m-1].
 };
 
 } // namespace MOM

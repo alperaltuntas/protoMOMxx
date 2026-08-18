@@ -222,6 +222,14 @@ public:
   /// @return The IareaCv field.
   const amrex::MultiFab &IareaCv() const { return fields_.IareaCv; }
 
+  /// @brief IdxCu masked by the u-point open-boundary mask [L-1 ~> m-1].
+  /// @return The IdxCu_OBCmask field.
+  const amrex::MultiFab &IdxCu_OBCmask() const { return fields_.IdxCu_OBCmask; }
+
+  /// @brief IdyCv masked by the v-point open-boundary mask [L-1 ~> m-1].
+  /// @return The IdyCv_OBCmask field.
+  const amrex::MultiFab &IdyCv_OBCmask() const { return fields_.IdyCv_OBCmask; }
+
 private:
   GridFields fields_;  ///< The grid fields (owned).
 };

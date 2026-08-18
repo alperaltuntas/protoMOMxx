@@ -7,21 +7,19 @@ VERBOSITY = 2                   ! default = 2
                                 !   0 = Only FATAL messages
                                 !   2 = Only FATAL, WARNING, NOTE [default]
                                 !   9 = All
-DT = 1200.0                     !   [s]
+DT = 300.0                      !   [s]
                                 ! The (baroclinic) dynamics time step.  The time-step that is actually used will
                                 ! be an integer fraction of the forcing time-step (DT_FORCING in ocean-only mode
                                 ! or the coupling timestep in coupled mode.)
-DT_THERM = 2400.0               !   [s] default = 1200.0
+DT_THERM = 600.0                !   [s] default = 300.0
                                 ! The thermodynamic and tracer advection time step. Ideally DT_THERM should be
                                 ! an integer multiple of DT and less than the forcing or coupling time-step,
                                 ! unless THERMO_SPANS_COUPLING is true, in which case DT_THERM can be an integer
                                 ! multiple of the coupling timestep.  By default DT_THERM is set to DT.
-SPLIT = True                    ! default = True
+SPLIT = False                   ! default = True
                                 ! Use the split time stepping if true.
-SPLIT_RK4 = False               ! default = False
-                                ! If true, use a version of the split explicit time stepping scheme that
-                                ! exchanges velocities with step_MOM that have the average barotropic phase over
-                                ! a baroclinic timestep rather than the instantaneous barotropic phase.
+USE_RK2 = True                  ! default = False
+                                ! If true, use RK2 instead of RK3 in the unsplit time stepping.
 
 ! === module MOM_domains ===
 REENTRANT_X = False             ! default = True
@@ -154,8 +152,185 @@ VELOCITY_CONFIG = "zero"        ! default = "zero"
                                 !      parameters INITIAL_U_CONST and INITIAL_V_CONST).
                                 !    USER - call a user modified routine.
 
+! === module MOM_PressureForce ===
+PRESSUREFORCE = "Montgomery"    ! default = "FV"
+                                ! Pressure force scheme.  Options are:
+                                !    FV - finite volume, with analytic integration
+                                !    Montgomery - Montgomery potential form
+
+! === module MOM_CoriolisAdv ===
+NOSLIP = False                  ! default = False
+                                ! If true, no slip boundary conditions are used; otherwise free slip boundary
+                                ! conditions are assumed. The implementation of the free slip BCs on a C-grid is
+                                ! much cleaner than the no slip BCs. The use of the free slip BCs is strongly
+                                ! encouraged, and no slip BCs are not used with the biharmonic viscosity.
+CORIOLIS_EN_DIS = False         ! default = False
+                                ! If true, two estimates of the thickness fluxes are used to estimate the
+                                ! Coriolis term, and the one that dissipates energy relative to the other one is
+                                ! used.
+CORIOLIS_SCHEME = "SADOURNY75_ENERGY" ! default = "SADOURNY75_ENERGY"
+                                ! CORIOLIS_SCHEME selects the discretization for the Coriolis terms. Valid
+                                ! values are:
+                                !    SADOURNY75_ENERGY - Sadourny, 1975; energy conserving
+                                !    ARAKAWA_HSU90     - Arakawa & Hsu, 1990
+                                !    SADOURNY75_ENSTRO - Sadourny, 1975; enstrophy conserving
+                                !    ARAKAWA_LAMB81    - Arakawa & Lamb, 1981; both energy and enstrophy
+                                !    ARAKAWA_LAMB_BLEND - A blend of Arakawa & Lamb with Arakawa & Hsu and
+                                ! Sadourny energy
+BOUND_CORIOLIS = True           ! default = False
+                                ! If true, the Coriolis terms at u-points are bounded by the four estimates of
+                                ! (f+rv)v from the four neighboring v-points, and similarly at v-points.  This
+                                ! option is always effectively false with CORIOLIS_EN_DIS defined and
+                                ! CORIOLIS_SCHEME set to SADOURNY75_ENERGY.
+KE_SCHEME = "KE_ARAKAWA"        ! default = "KE_ARAKAWA"
+                                ! KE_SCHEME selects the discretization for acceleration due to the kinetic
+                                ! energy gradient. Valid values are:
+                                !    KE_ARAKAWA, KE_SIMPLE_GUDONOV, KE_GUDONOV, KE_UP3
+PV_ADV_SCHEME = "PV_ADV_CENTERED" ! default = "PV_ADV_CENTERED"
+                                ! PV_ADV_SCHEME selects the discretization for PV advection. Valid values are:
+                                !    PV_ADV_CENTERED - centered (aka Sadourny, 75)
+                                !    PV_ADV_UPWIND1  - upwind, first order
+
+! === module MOM_continuity_PPM ===
+MONOTONIC_CONTINUITY = False    ! default = False
+                                ! If true, CONTINUITY_PPM uses the Colella and Woodward monotonic limiter. The
+                                ! default (false) is to use a simple positive definite limiter.
+SIMPLE_2ND_PPM_CONTINUITY = False ! default = False
+                                ! If true, CONTINUITY_PPM uses a simple 2nd order (arithmetic mean)
+                                ! interpolation of the edge values. This may give better PV conservation
+                                ! properties. While it formally reduces the accuracy of the continuity solver
+                                ! itself in the strongly advective limit, it does not reduce the overall order
+                                ! of accuracy of the dynamic core.
+UPWIND_1ST_CONTINUITY = False   ! default = False
+                                ! If true, CONTINUITY_PPM becomes a 1st-order upwind continuity solver. This
+                                ! scheme is highly diffusive but may be useful for debugging or in single-column
+                                ! mode where its minimal stencil is useful.
+CONT_PPM_VOLUME_BASED_CFL = False ! default = False
+                                ! If true, use the ratio of the open face lengths to the tracer cell areas when
+                                ! estimating CFL numbers in the continuity solver.
+
+! === module MOM_hor_visc ===
+LAPLACIAN = True                ! default = False
+                                ! If true, use a Laplacian horizontal viscosity.
+KH = 1.0e+04                    !   [m2 s-1] default = 0.0
+                                ! The background Laplacian horizontal viscosity.
+KH_BG_MIN = 0.0                 !   [m2 s-1] default = 0.0
+                                ! The minimum value allowed for Laplacian horizontal viscosity.
+KH_VEL_SCALE = 0.003            !   [m s-1] default = 0.0
+                                ! The velocity scale which is multiplied by the grid spacing to calculate the
+                                ! Laplacian viscosity. The final viscosity is the largest of this scaled
+                                ! viscosity, the Smagorinsky and Leith viscosities, and KH.
+SMAGORINSKY_KH = True           ! default = False
+                                ! If true, use a Smagorinsky nonlinear eddy viscosity.
+SMAG_LAP_CONST = 0.15           !   [nondim] default = 0.0
+                                ! The nondimensional Laplacian Smagorinsky constant, often 0.15.
+LEITH_KH = False                ! default = False
+                                ! If true, use a Leith nonlinear eddy viscosity.
+BOUND_KH = True                 ! default = True
+                                ! If true, the Laplacian coefficient is locally limited to be stable.
+ANISOTROPIC_VISCOSITY = False   ! default = False
+                                ! If true, allow anisotropic viscosity in the Laplacian horizontal viscosity.
+ADD_LES_VISCOSITY = False       ! default = False
+                                ! If true, adds the viscosity from Smagorinsky and Leith to the background
+                                ! viscosity instead of taking the maximum.
+BIHARMONIC = False              ! default = True
+                                ! If true, use a biharmonic horizontal viscosity. BIHARMONIC may be used with
+                                ! LAPLACIAN.
+USE_LAND_MASK_FOR_HVISC = True  ! default = True
+                                ! If true, use the land mask for the computation of thicknesses at velocity
+                                ! locations. This eliminates the dependence on arbitrary values over land or
+                                ! outside of the domain.
+HORVISC_BOUND_COEF = 0.8        !   [nondim] default = 0.8
+                                ! The nondimensional coefficient of the ratio of the viscosity bounds to the
+                                ! theoretical maximum for stability without considering other terms.
+
+! === module MOM_set_visc ===
+BOTTOMDRAGLAW = True            ! default = True
+                                ! If true, the bottom stress is calculated with a drag law of the form
+                                ! c_drag*|u|*u. The velocity magnitude may be an assumed value or it may be
+                                ! based on the actual velocity in the bottommost HBBL, depending on LINEAR_DRAG.
+DRAG_AS_BODY_FORCE = False      ! default = False
+                                ! If true, the bottom stress is imposed as an explicit body force applied over a
+                                ! fixed distance from the bottom, rather than as an implied stress.
+CHANNEL_DRAG = False            ! default = False
+                                ! If true, the bottom drag is exerted directly on each layer proportional to the
+                                ! fraction of the bottom it overlies.
+LINEAR_DRAG = True              ! default = False
+                                ! If LINEAR_DRAG and BOTTOMDRAGLAW are defined the drag law is
+                                ! cdrag*DRAG_BG_VEL*u.
+DYNAMIC_VISCOUS_ML = False      ! default = False
+                                ! If true, use a bulk Richardson number criterion to determine the mixed layer
+                                ! thickness for viscosity.
+HBBL = 10.0                     !   [m]
+                                ! The thickness of a bottom boundary layer with a viscosity increased by
+                                ! KV_EXTRA_BBL if BOTTOMDRAGLAW is not defined, or the thickness over which
+                                ! near-bottom velocities are averaged for the drag law if BOTTOMDRAGLAW is
+                                ! defined but LINEAR_DRAG is not.
+CDRAG = 0.003                   !   [nondim] default = 0.003
+                                ! CDRAG is the drag coefficient relating the magnitude of the velocity field to
+                                ! the bottom stress.
+DRAG_BG_VEL = 0.1               !   [m s-1] default = 0.0
+                                ! DRAG_BG_VEL is either the assumed bottom velocity (with LINEAR_DRAG) or an
+                                ! unresolved velocity that is combined with the resolved velocity to estimate
+                                ! the velocity magnitude.
+BBL_THICK_MIN = 0.1             !   [m] default = 0.0
+                                ! The minimum bottom boundary layer thickness that can be used with
+                                ! BOTTOMDRAGLAW. This might be Kv/(cdrag*drag_bg_vel) to give Kv as the minimum
+                                ! near-bottom viscosity.
+KV = 1.0e-04                    !   [m2 s-1]
+                                ! The background kinematic viscosity in the interior. The molecular value, ~1e-6
+                                ! m2 s-1, may be used.
+KV_BBL_MIN = 1.0e-04            !   [m2 s-1] default = 1.0e-04
+                                ! The minimum viscosities in the bottom boundary layer.
+CORRECT_BBL_BOUNDS = False      ! default = False
+                                ! If true, uses the correct bounds on the BBL thickness and viscosity so that
+                                ! the bottom layer feels the intended drag.
+
+! === module MOM_vert_friction ===
+DIRECT_STRESS = True            ! default = False
+                                ! If true, the wind stress is distributed over the topmost HMIX_STRESS of fluid
+                                ! (like in HYCOM), and KVML may be set to a very small value.
+FIXED_DEPTH_LOTW_ML = False     ! default = False
+                                ! If true, use a Law-of-the-wall prescription for the mixed layer viscosity
+                                ! within a boundary layer of a fixed thickness.
+LOTW_VISCOUS_ML_FLOOR = False   ! default = False
+                                ! If true, use a Law-of-the-wall prescription to set a lower bound on the
+                                ! viscous coupling between layers within the surface boundary layer.
+HARMONIC_VISC = True            ! default = False
+                                ! If true, use the harmonic mean thicknesses for calculating the vertical
+                                ! viscosity.
+HMIX_FIXED = 20.0               !   [m]
+                                ! The prescribed depth over which the near-surface viscosity and diffusivity are
+                                ! elevated when the bulk mixed layer is not used.
+HMIX_STRESS = 20.0              !   [m] default = 20.0
+                                ! The depth over which the wind stress is applied if DIRECT_STRESS is true.
+USE_GL90_IN_SSW = False         ! default = False
+                                ! If true, use the GL90 parameterization for vertical momentum transport.
+KV_ML_INVZ2 = 0.01              !   [m2 s-1] default = 0.01
+                                ! An extra kinematic viscosity in a region near the top of the ocean, typically
+                                ! of the mixed layer, that decays away with the square of the distance from the
+                                ! surface.
+
+! === module MOM_dynamics_unsplit_RK2 ===
+BE = 0.6                        !   [nondim] default = 0.6
+                                ! If SPLIT is true, BE determines the relative weighting of a 2nd-order
+                                ! Runga-Kutta baroclinic time stepping scheme (0.5) and a backward Euler scheme
+                                ! (1) that is used for the Coriolis and inertial terms.  BE may be from 0.5 to
+                                ! 1, but instability may occur near 0.5.  BE is also applicable if SPLIT is
+                                ! false and USE_RK2 is true.
+BEGW = 0.0                      !   [nondim] default = 0.0
+                                ! If SPLIT is true, BEGW is a number from 0 to 1 that controls the extent to
+                                ! which the treatment of gravity waves is forward-backward (0) or simulated
+                                ! backward Euler (1).  0 is almost always used. If SPLIT is false and USE_RK2 is
+                                ! true, BEGW can be between 0 and 0.5 to damp gravity waves.
+UNSPLIT_DT_VISC_BUG = False     ! default = False
+                                ! If false, use the correct timestep in the viscous terms applied in the first
+                                ! predictor step with the unsplit time stepping scheme, and in the calculation
+                                ! of the turbulent mixed layer properties for viscosity with unsplit or
+                                ! unsplit_RK2.  If true, an older incorrect value is used.
+
 ! === module MOM_main (MOM_driver) ===
-DT_FORCING = 2400.0             !   [s] default = 1200.0
+DT_FORCING = 600.0              !   [s] default = 300.0
                                 ! The time step for changing forcing, coupling with other components, or
                                 ! potentially writing certain diagnostics. The default value is given by DT.
 TIMEUNIT = 8.64e+04             !   [s] default = 8.64e+04

@@ -231,6 +231,8 @@ void set_derived_metrics(const Domain &domain, GridFields &fields) {
   fields.areaCv = domain.make_field(Stagger::YFace, n_levels, ncomp);
   fields.IareaCu = domain.make_field(Stagger::XFace, n_levels, ncomp);
   fields.IareaCv = domain.make_field(Stagger::YFace, n_levels, ncomp);
+  fields.IdxCu_OBCmask = domain.make_field(Stagger::XFace, n_levels, ncomp);
+  fields.IdyCv_OBCmask = domain.make_field(Stagger::YFace, n_levels, ncomp);
 
   for (amrex::MFIter mfi(fields.IdxT); mfi.isValid(); ++mfi) {
     const amrex::Box cells = amrex::grow(mfi.validbox(), domain.nghost());
@@ -258,8 +260,11 @@ void set_derived_metrics(const Domain &domain, GridFields &fields) {
     const amrex::Array4<amrex::Real> dy_Cu = fields.dy_Cu.array(mfi);
     const amrex::Array4<amrex::Real> areaCu = fields.areaCu.array(mfi);
     const amrex::Array4<amrex::Real> IareaCu = fields.IareaCu.array(mfi);
+    const amrex::Array4<amrex::Real> IdxCu_OBCmask = fields.IdxCu_OBCmask.array(mfi);
     amrex::ParallelFor(u_faces, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
       IdxCu(i, j, k) = Adcroft_reciprocal(dxCu(i, j, k));
+      // With no open boundaries MOM6's OBCmaskCu is the land/sea mask.
+      IdxCu_OBCmask(i, j, k) = maskCu(i, j, k) * IdxCu(i, j, k);
       IdyCu(i, j, k) = Adcroft_reciprocal(dyCu(i, j, k));
       dy_Cu(i, j, k) = maskCu(i, j, k) * dyCu(i, j, k);
       areaCu(i, j, k) = dxCu(i, j, k) * dy_Cu(i, j, k);
@@ -274,8 +279,10 @@ void set_derived_metrics(const Domain &domain, GridFields &fields) {
     const amrex::Array4<amrex::Real> dx_Cv = fields.dx_Cv.array(mfi);
     const amrex::Array4<amrex::Real> areaCv = fields.areaCv.array(mfi);
     const amrex::Array4<amrex::Real> IareaCv = fields.IareaCv.array(mfi);
+    const amrex::Array4<amrex::Real> IdyCv_OBCmask = fields.IdyCv_OBCmask.array(mfi);
     amrex::ParallelFor(v_faces, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
       IdxCv(i, j, k) = Adcroft_reciprocal(dxCv(i, j, k));
+      IdyCv_OBCmask(i, j, k) = maskCv(i, j, k) * Adcroft_reciprocal(dyCv(i, j, k));
       IdyCv(i, j, k) = Adcroft_reciprocal(dyCv(i, j, k));
       dx_Cv(i, j, k) = maskCv(i, j, k) * dxCv(i, j, k);
       areaCv(i, j, k) = dyCv(i, j, k) * dx_Cv(i, j, k);

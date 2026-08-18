@@ -8,6 +8,8 @@
 #include <iostream>
 
 #include "MOM.h"
+#include <AMReX_Utility.H>
+
 #include "MOM_clock.h"
 #include "MOM_debug_dump.h"
 #include "MOM_directories.h"
@@ -62,6 +64,12 @@ int main(int argc, char* argv[]) {
     // diffed against legacy MOM6's ocean_geometry.nc. Retires with the I/O
     // layer.
     if (model.config().debug) {
+      MOM::debug::set_reporting(true);
+      MOM::debug::report_field(model.grid().areaT(), "areaT");
+      MOM::debug::report_field(model.grid().dxT(), "dxT");
+      MOM::debug::report_field(model.grid().CoriolisBu(), "CoriolisBu");
+      MOM::debug::report_field(model.grid().bathyT(), "bathyT");
+      MOM::debug::report_field(model.state().h(), "h init");
       MOM::debug::dump_field(model.grid().geoLatT(), "geoLatT");
       MOM::debug::dump_field(model.grid().geoLonT(), "geoLonT");
       MOM::debug::dump_field(model.grid().dxT(), "dxT");
@@ -83,11 +91,19 @@ int main(int argc, char* argv[]) {
                       " days, ", clock.steps_per_forcing(),
                       " dynamics steps per forcing interval.");
 
+    const double loop_start = amrex::second();
+    int dyn_steps = 0;
+
     while (!clock.done()) {
       surface_forcing.set_forcing(forces, clock.time());
       model.step(forces, clock.dt_forcing(), clock.steps_per_forcing());
+      dyn_steps += clock.steps_per_forcing();
       clock.advance();
     }
+
+    const double loop_seconds = amrex::second() - loop_start;
+    MOM::logger::note("Main loop: ", loop_seconds, " s for ", dyn_steps,
+                      " dynamics steps (", loop_seconds / dyn_steps, " s/step).");
 
     // todo: finish_MOM_initialization() on the first iteration
     // defer: mech_forcing_diags(), forcing_diagnostics()

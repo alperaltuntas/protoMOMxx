@@ -69,9 +69,11 @@ StateFields initialize_state(const Domain &domain, const StateSpec &spec,
   fields.u = domain.make_field(Stagger::XFace, spec.nk, 1);
   fields.v = domain.make_field(Stagger::YFace, spec.nk, 1);
 
-  // MOM6 allocates the prognostic arrays with source=0.0; the halos outside
-  // the global domain, which no initialization reaches, stay zero here too.
-  fields.h.setVal(0.0);
+  // MOM6 allocates h at the Angstrom and u and v at zero. The fill value
+  // matters: the thickness configurations only write the computational
+  // domain, so it is what the halo outside the global domain keeps, and the
+  // pressure gradient at the boundary faces is computed from it.
+  fields.h.setVal(spec.angstrom);
   fields.u.setVal(0.0);
   fields.v.setVal(0.0);
 

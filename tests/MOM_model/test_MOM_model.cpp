@@ -51,9 +51,13 @@ TEST(MOMModelTest, TwoInstancesCoexist) {
   const MOM::Model model_a(params_a);
   const MOM::Model model_b(params_b);
 
-  // The two instances hold independent configurations and domains.
+  // The two instances hold independent configurations and domains. Both run
+  // the unsplit scheme, which is the only one implemented, so they are told
+  // apart by their extents and timesteps instead.
   EXPECT_FALSE(model_a.config().split);
-  EXPECT_TRUE(model_b.config().split);
+  EXPECT_FALSE(model_b.config().split);
+  EXPECT_DOUBLE_EQ(model_a.config().dt, 1200.0);
+  EXPECT_DOUBLE_EQ(model_b.config().dt, 1200.0);
   EXPECT_EQ(model_a.domain().ni_global(), 44);
   EXPECT_EQ(model_a.domain().nj_global(), 40);
   EXPECT_EQ(model_b.domain().ni_global(), 14);

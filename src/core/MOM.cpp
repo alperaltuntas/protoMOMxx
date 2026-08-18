@@ -2,6 +2,7 @@
 #include "MOM_domains.h"
 #include "MOM_fixed_initialization.h"
 #include "MOM_state_initialization.h"
+#include "MOM_debug_dump.h"
 #include "MOM_logger.h"
 
 namespace MOM {
@@ -19,6 +20,8 @@ Model::Model(RuntimeParams &params)
 
   // Initialization phases, in the order of MOM6's initialize_MOM:
   initialize_dynamics(params);
+
+  debug::set_reporting(config_.debug);
 
   logger::note("MOM core initialization complete.");
 }
@@ -102,18 +105,7 @@ void Model::step(const MechForcing &forces, const amrex::Real dt_forcing,
     // MOM6's step_MOM dispatches here on the four-way split / split_RK4 /
     // RK2 / RK3 branch. Only the branch selection exists so far; the schemes
     // themselves are the dynamics work that follows.
-    if (config_.split) {
-      if (config_.split_rk4) {
-        logger::fatal("Model::step: the split RK4 scheme is not implemented.");
-      }
-      // todo: step_MOM_dyn_split_RK2.
-    } else if (config_.use_RK2) {
-      // todo: step_MOM_dyn_unsplit_RK2.
-    } else {
-      // todo: step_MOM_dyn_unsplit (RK3).
-    }
-    (void)dt_dyn;
-    (void)forces;
+    dynamics_->step(state_, forces, dt_dyn, domain_, grid_, vgrid_);
     // defer: the thermodynamic and tracer half of step_MOM (ADIABATIC is true
     //        and there are no tracers in the driving testcase), the diagnostic
     //        calls, and the surface-state extraction.
@@ -122,12 +114,23 @@ void Model::step(const MechForcing &forces, const amrex::Real dt_forcing,
 
 void Model::initialize_dynamics(RuntimeParams &params) {
 
-  logger::note("initialize_dynamics: (stub)");
+  // MOM6's four-way initialize_dyn_* branch. Only the unsplit RK2 scheme
+  // exists here; the split schemes need the barotropic solver.
+  if (config_.split) {
+    // defer: MOM_dynamics_split_RK2 and its split_RK4 variant, which need
+    //        MOM_barotropic.
+    logger::fatal("initialize_dynamics: the split time stepping is not implemented yet; "
+                  "set SPLIT = False and USE_RK2 = True.");
+  }
+  if (!config_.use_RK2) {
+    // defer: MOM_dynamics_unsplit, the three-stage RK3 scheme.
+    logger::fatal("initialize_dynamics: the unsplit RK3 scheme is not implemented yet; "
+                  "set USE_RK2 = True.");
+  }
 
-  // todo: dynamics subsystem construction, dispatching on config_.split /
-  //       config_.use_RK2 as in MOM6's four-way initialize_dyn_* branch.
+  dynamics_ = std::make_unique<DynamicsUnsplitRK2>(params, config_.dt, domain_, grid_, vgrid_);
+
   // defer: restart registration (register_restarts_dyn_*), diagnostics.
-  (void)params;
 }
 
 } // namespace MOM

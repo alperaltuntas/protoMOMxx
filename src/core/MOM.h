@@ -8,6 +8,9 @@
 #include "MOM_domain_infra.h"
 #include "MOM_file_parser.h"
 #include "MOM_grid.h"
+#include <memory>
+
+#include "MOM_dynamics_unsplit_RK2.h"
 #include "MOM_forcing_type.h"
 #include "MOM_state.h"
 #include "MOM_vertical_grid.h"
@@ -89,6 +92,11 @@ private:
   /// @brief The prognostic state: the layer thicknesses and the horizontal
   /// velocity components.
   State state_;
+
+  /// @brief The dynamical core. Held by pointer because the four time
+  /// stepping schemes are alternatives: only the configured one is
+  /// constructed, and only it reads its own parameters.
+  std::unique_ptr<DynamicsUnsplitRK2> dynamics_;
 
   /// @brief Read the scalar configuration switches into a Config object.
   static Config read_config_switches(RuntimeParams &params);
