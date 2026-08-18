@@ -1,0 +1,6 @@
+! Parameter file for the VerticalGrid unit tests: a minimal single-layer
+! gprime configuration exercising the GFS and LIGHTEST_DENSITY defaults.
+NK = 1
+MAXIMUM_DEPTH = 1000.0
+COORD_CONFIG = "gprime"
+GINT = 0.0098

@@ -1,0 +1,5 @@
+! Parameter file for the VerticalGrid unit tests: a non-positive layer count.
+NK = 0
+MAXIMUM_DEPTH = 2000.0
+COORD_CONFIG = "gprime"
+GINT = 0.0098

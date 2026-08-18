@@ -8,6 +8,7 @@
 #include "MOM_domain_infra.h"
 #include "MOM_file_parser.h"
 #include "MOM_grid.h"
+#include "MOM_vertical_grid.h"
 
 namespace MOM {
 
@@ -62,6 +63,10 @@ public:
   /// @return Const reference to the model's horizontal grid.
   const Grid &grid() const { return grid_; }
 
+  /// @brief Read-only access to the vertical grid.
+  /// @return Const reference to the model's vertical grid.
+  const VerticalGrid &vertical_grid() const { return vgrid_; }
+
 private:
   // config_ initialization must precede domain_: its initializer sets the log 
   // verbosity in effect for the later initializers' messages.
@@ -75,17 +80,12 @@ private:
   /// Coriolis parameter, on domain_'s decomposition.
   Grid grid_;
 
-  // tmp: vertical grid extent, kept as a scalar member until the
-  // VerticalGrid class takes ownership of it.
-  int nk_ = 0;
+  /// @brief The vertical grid: the layer count, the interface reduced
+  /// gravities, and the layer target densities.
+  VerticalGrid vgrid_;
 
   /// @brief Read the scalar configuration switches into a Config object.
   static Config read_config_switches(RuntimeParams &params);
-
-  /// @brief Initialize the vertical grid and coordinate: nk, reduced
-  /// gravities, target densities. Analogue of MOM6's verticalGridInit +
-  /// MOM_initialize_coord. (stub)
-  void initialize_vertical(RuntimeParams &params);
 
   /// @brief Initialize the prognostic state (u, v, h, ...). Analogue of
   /// MOM6's MOM_initialize_state. (stub -- currently runs the original psi

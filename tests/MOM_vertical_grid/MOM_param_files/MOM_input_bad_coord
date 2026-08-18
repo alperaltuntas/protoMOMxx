@@ -1,0 +1,5 @@
+! Parameter file for the VerticalGrid unit tests: a COORD_CONFIG option that
+! protoMOMxx does not implement.
+NK = 2
+MAXIMUM_DEPTH = 2000.0
+COORD_CONFIG = "linear"
