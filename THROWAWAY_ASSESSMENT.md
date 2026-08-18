@@ -669,9 +669,12 @@ against.
 
 ## 8. What was not tested
 
-- **MPI.** No host list is available on the login node, so the `mpi`-labelled
-  tests could not run. Layout independence was tested with multiple boxes on
-  one rank instead, which exercises the same halo code but not the exchange.
+- **MPI, for the dynamics.** The `mpi`-labelled tests do run and pass in a
+  compute-node allocation -- the earlier "no host list on the login node" was
+  a property of where the tests were run, not of the tests -- but they cover
+  the infrastructure and the domain, not the dynamical core. Layout
+  independence for the dynamics was tested with multiple boxes on one rank
+  instead, which exercises the same halo code but not the exchange.
 - **GPU.** Not attempted.
 - **Restart exactness and rotational symmetry**, two of the four §5
   invariants; neither has an implementation to test.
