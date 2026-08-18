@@ -480,12 +480,37 @@ void SumOutput::write_energy(const State &state, const Domain &domain, const Gri
       logger::fatal("SumOutput: cannot open ", energyfile_, " for writing.");
     }
     if (previous_calls_ == 0) {
-      std::fprintf(f,
-                   "  Step,       Day,  Truncs,      Energy/Mass,      Maximum CFL,"
-                   "  Mean sea level,   Total Mass,    Frac Mass Err\n");
-      std::fprintf(f,
-                   "            [days]                 [m2 s-2]           [Nondim]"
-                   "        [m]             [kg]           [Nondim]\n");
+      // MOM6 labels the time column "Day" and dates it in days when TIMEUNIT is
+      // a day, and labels it "Time" and dates it in units of TIMEUNIT
+      // otherwise. Any run that sets TIMEUNIT to something else -- a second, an
+      // hour, a year, a timestep -- takes the second branch.
+      if (std::fabs(timeunit_ - 86400.0) < 1.0) {
+        std::fprintf(f,
+                     "  Step,       Day,  Truncs,      Energy/Mass,      Maximum CFL,"
+                     "  Mean sea level,   Total Mass,    Frac Mass Err\n");
+        std::fprintf(f,
+                     "            [days]                 [m2 s-2]           [Nondim]"
+                     "        [m]             [kg]           [Nondim]\n");
+      } else {
+        // The unit label occupies 25 columns whichever branch writes it.
+        char time_units[26];
+        if (timeunit_ >= 0.99 && timeunit_ < 1.01) {
+          std::snprintf(time_units, sizeof(time_units), "           [seconds]     ");
+        } else if (timeunit_ >= 3599.0 && timeunit_ < 3601.0) {
+          std::snprintf(time_units, sizeof(time_units), "            [hours]      ");
+        } else if (timeunit_ >= 3.0e7 && timeunit_ < 3.2e7) {
+          std::snprintf(time_units, sizeof(time_units), "            [years]      ");
+        } else {
+          std::snprintf(time_units, sizeof(time_units), "         [%8.2E s]    ", timeunit_);
+        }
+        std::fprintf(f,
+                     "  Step,       Time, Truncs,      Energy/Mass,      Maximum CFL,"
+                     "  Mean sea level,   Total Mass,    Frac Mass Err\n");
+        std::fprintf(f,
+                     "%s          [m2 s-2]           [Nondim]        [m]             [kg]"
+                     "           [Nondim]\n",
+                     time_units);
+      }
     }
     std::fprintf(f, "%s,%s,%6d, En %22.16E, CFL %8.5f, SL %11.4E, Mass %11.5E, Me %9.2E\n",
                  n_str, day_str, ntrunc_, En_mass, max_CFL_trans, -Z_0APE[1], mass_tot,
