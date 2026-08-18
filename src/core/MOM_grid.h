@@ -154,6 +154,74 @@ public:
   /// @return The q-point mask field.
   const amrex::MultiFab &mask2dBu() const { return fields_.mask2dBu; }
 
+  /// @brief 1/dxT at h points [L-1 ~> m-1].
+  /// @return The IdxT field.
+  const amrex::MultiFab &IdxT() const { return fields_.IdxT; }
+
+  /// @brief 1/dyT at h points [L-1 ~> m-1].
+  /// @return The IdyT field.
+  const amrex::MultiFab &IdyT() const { return fields_.IdyT; }
+
+  /// @brief 1/areaT at h points [L-2 ~> m-2].
+  /// @return The IareaT field.
+  const amrex::MultiFab &IareaT() const { return fields_.IareaT; }
+
+  /// @brief 1/dxCu at u points [L-1 ~> m-1].
+  /// @return The IdxCu field.
+  const amrex::MultiFab &IdxCu() const { return fields_.IdxCu; }
+
+  /// @brief 1/dyCu at u points [L-1 ~> m-1].
+  /// @return The IdyCu field.
+  const amrex::MultiFab &IdyCu() const { return fields_.IdyCu; }
+
+  /// @brief 1/dxCv at v points [L-1 ~> m-1].
+  /// @return The IdxCv field.
+  const amrex::MultiFab &IdxCv() const { return fields_.IdxCv; }
+
+  /// @brief 1/dyCv at v points [L-1 ~> m-1].
+  /// @return The IdyCv field.
+  const amrex::MultiFab &IdyCv() const { return fields_.IdyCv; }
+
+  /// @brief 1/dxBu at q points [L-1 ~> m-1].
+  /// @return The IdxBu field.
+  const amrex::MultiFab &IdxBu() const { return fields_.IdxBu; }
+
+  /// @brief 1/dyBu at q points [L-1 ~> m-1].
+  /// @return The IdyBu field.
+  const amrex::MultiFab &IdyBu() const { return fields_.IdyBu; }
+
+  /// @brief The area of a q-cell [L2 ~> m2].
+  /// @return The areaBu field.
+  const amrex::MultiFab &areaBu() const { return fields_.areaBu; }
+
+  /// @brief 1/areaBu at q points [L-2 ~> m-2].
+  /// @return The IareaBu field.
+  const amrex::MultiFab &IareaBu() const { return fields_.IareaBu; }
+
+  /// @brief The unblocked length of a u face [L ~> m].
+  /// @return The dy_Cu field.
+  const amrex::MultiFab &dy_Cu() const { return fields_.dy_Cu; }
+
+  /// @brief The unblocked length of a v face [L ~> m].
+  /// @return The dx_Cv field.
+  const amrex::MultiFab &dx_Cv() const { return fields_.dx_Cv; }
+
+  /// @brief The area of a u-cell [L2 ~> m2].
+  /// @return The areaCu field.
+  const amrex::MultiFab &areaCu() const { return fields_.areaCu; }
+
+  /// @brief The area of a v-cell [L2 ~> m2].
+  /// @return The areaCv field.
+  const amrex::MultiFab &areaCv() const { return fields_.areaCv; }
+
+  /// @brief The masked 1/areaCu [L-2 ~> m-2].
+  /// @return The IareaCu field.
+  const amrex::MultiFab &IareaCu() const { return fields_.IareaCu; }
+
+  /// @brief The masked 1/areaCv [L-2 ~> m-2].
+  /// @return The IareaCv field.
+  const amrex::MultiFab &IareaCv() const { return fields_.IareaCv; }
+
 private:
   GridFields fields_;  ///< The grid fields (owned).
 };

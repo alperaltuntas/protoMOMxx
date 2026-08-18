@@ -133,6 +133,16 @@ GridFields spherical_grid_fields(const Domain &domain, const GridSpec &spec) {
   return fields;
 }
 
+namespace {
+
+// 1/x, or 0 where x is 0. MOM6's Adcroft_reciprocal.
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+amrex::Real Adcroft_reciprocal(const amrex::Real val) {
+  return (val != 0.0) ? (1.0 / val) : 0.0;
+}
+
+} // namespace
+
 void initialize_masks(const Domain &domain, const TopoSpec &topo_spec,
                       const amrex::MultiFab &bathyT, GridFields &fields) {
 
@@ -197,6 +207,96 @@ void initialize_masks(const Domain &domain, const TopoSpec &topo_spec,
   // defer: the OBC-aware mask revisions of initialize_masks (OBC_dir_u/v and
   //        open_corner_OBCs); the double_gyre configuration has no open
   //        boundaries.
+}
+
+void set_derived_metrics(const Domain &domain, GridFields &fields) {
+
+  const int n_levels = 1;
+  const int ncomp = 1;
+
+  fields.IdxT = domain.make_field(Stagger::Cell, n_levels, ncomp);
+  fields.IdyT = domain.make_field(Stagger::Cell, n_levels, ncomp);
+  fields.IareaT = domain.make_field(Stagger::Cell, n_levels, ncomp);
+  fields.IdxCu = domain.make_field(Stagger::XFace, n_levels, ncomp);
+  fields.IdyCu = domain.make_field(Stagger::XFace, n_levels, ncomp);
+  fields.IdxCv = domain.make_field(Stagger::YFace, n_levels, ncomp);
+  fields.IdyCv = domain.make_field(Stagger::YFace, n_levels, ncomp);
+  fields.IdxBu = domain.make_field(Stagger::Node, n_levels, ncomp);
+  fields.IdyBu = domain.make_field(Stagger::Node, n_levels, ncomp);
+  fields.areaBu = domain.make_field(Stagger::Node, n_levels, ncomp);
+  fields.IareaBu = domain.make_field(Stagger::Node, n_levels, ncomp);
+  fields.dy_Cu = domain.make_field(Stagger::XFace, n_levels, ncomp);
+  fields.dx_Cv = domain.make_field(Stagger::YFace, n_levels, ncomp);
+  fields.areaCu = domain.make_field(Stagger::XFace, n_levels, ncomp);
+  fields.areaCv = domain.make_field(Stagger::YFace, n_levels, ncomp);
+  fields.IareaCu = domain.make_field(Stagger::XFace, n_levels, ncomp);
+  fields.IareaCv = domain.make_field(Stagger::YFace, n_levels, ncomp);
+
+  for (amrex::MFIter mfi(fields.IdxT); mfi.isValid(); ++mfi) {
+    const amrex::Box cells = amrex::grow(mfi.validbox(), domain.nghost());
+    const amrex::Box u_faces = amrex::surroundingNodes(cells, 0);
+    const amrex::Box v_faces = amrex::surroundingNodes(cells, 1);
+    const amrex::Box corners = amrex::surroundingNodes(amrex::surroundingNodes(cells, 0), 1);
+
+    const amrex::Array4<const amrex::Real> dxT = fields.dxT.const_array(mfi);
+    const amrex::Array4<const amrex::Real> dyT = fields.dyT.const_array(mfi);
+    const amrex::Array4<const amrex::Real> areaT = fields.areaT.const_array(mfi);
+    const amrex::Array4<amrex::Real> IdxT = fields.IdxT.array(mfi);
+    const amrex::Array4<amrex::Real> IdyT = fields.IdyT.array(mfi);
+    const amrex::Array4<amrex::Real> IareaT = fields.IareaT.array(mfi);
+    amrex::ParallelFor(cells, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+      IdxT(i, j, k) = Adcroft_reciprocal(dxT(i, j, k));
+      IdyT(i, j, k) = Adcroft_reciprocal(dyT(i, j, k));
+      IareaT(i, j, k) = Adcroft_reciprocal(areaT(i, j, k));
+    });
+
+    const amrex::Array4<const amrex::Real> dxCu = fields.dxCu.const_array(mfi);
+    const amrex::Array4<const amrex::Real> dyCu = fields.dyCu.const_array(mfi);
+    const amrex::Array4<const amrex::Real> maskCu = fields.mask2dCu.const_array(mfi);
+    const amrex::Array4<amrex::Real> IdxCu = fields.IdxCu.array(mfi);
+    const amrex::Array4<amrex::Real> IdyCu = fields.IdyCu.array(mfi);
+    const amrex::Array4<amrex::Real> dy_Cu = fields.dy_Cu.array(mfi);
+    const amrex::Array4<amrex::Real> areaCu = fields.areaCu.array(mfi);
+    const amrex::Array4<amrex::Real> IareaCu = fields.IareaCu.array(mfi);
+    amrex::ParallelFor(u_faces, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+      IdxCu(i, j, k) = Adcroft_reciprocal(dxCu(i, j, k));
+      IdyCu(i, j, k) = Adcroft_reciprocal(dyCu(i, j, k));
+      dy_Cu(i, j, k) = maskCu(i, j, k) * dyCu(i, j, k);
+      areaCu(i, j, k) = dxCu(i, j, k) * dy_Cu(i, j, k);
+      IareaCu(i, j, k) = maskCu(i, j, k) * Adcroft_reciprocal(areaCu(i, j, k));
+    });
+
+    const amrex::Array4<const amrex::Real> dxCv = fields.dxCv.const_array(mfi);
+    const amrex::Array4<const amrex::Real> dyCv = fields.dyCv.const_array(mfi);
+    const amrex::Array4<const amrex::Real> maskCv = fields.mask2dCv.const_array(mfi);
+    const amrex::Array4<amrex::Real> IdxCv = fields.IdxCv.array(mfi);
+    const amrex::Array4<amrex::Real> IdyCv = fields.IdyCv.array(mfi);
+    const amrex::Array4<amrex::Real> dx_Cv = fields.dx_Cv.array(mfi);
+    const amrex::Array4<amrex::Real> areaCv = fields.areaCv.array(mfi);
+    const amrex::Array4<amrex::Real> IareaCv = fields.IareaCv.array(mfi);
+    amrex::ParallelFor(v_faces, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+      IdxCv(i, j, k) = Adcroft_reciprocal(dxCv(i, j, k));
+      IdyCv(i, j, k) = Adcroft_reciprocal(dyCv(i, j, k));
+      dx_Cv(i, j, k) = maskCv(i, j, k) * dxCv(i, j, k);
+      areaCv(i, j, k) = dyCv(i, j, k) * dx_Cv(i, j, k);
+      IareaCv(i, j, k) = maskCv(i, j, k) * Adcroft_reciprocal(areaCv(i, j, k));
+    });
+
+    const amrex::Array4<const amrex::Real> dxBu = fields.dxBu.const_array(mfi);
+    const amrex::Array4<const amrex::Real> dyBu = fields.dyBu.const_array(mfi);
+    const amrex::Array4<amrex::Real> IdxBu = fields.IdxBu.array(mfi);
+    const amrex::Array4<amrex::Real> IdyBu = fields.IdyBu.array(mfi);
+    const amrex::Array4<amrex::Real> areaBu = fields.areaBu.array(mfi);
+    const amrex::Array4<amrex::Real> IareaBu = fields.IareaBu.array(mfi);
+    amrex::ParallelFor(corners, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+      IdxBu(i, j, k) = Adcroft_reciprocal(dxBu(i, j, k));
+      IdyBu(i, j, k) = Adcroft_reciprocal(dyBu(i, j, k));
+      // On a spherical grid set_grid_metrics_spherical already sets areaBu
+      // to dxBu*dyBu; MOM6's fallback here computes the same value.
+      areaBu(i, j, k) = dxBu(i, j, k) * dyBu(i, j, k);
+      IareaBu(i, j, k) = Adcroft_reciprocal(areaBu(i, j, k));
+    });
+  }
 }
 
 } // namespace MOM

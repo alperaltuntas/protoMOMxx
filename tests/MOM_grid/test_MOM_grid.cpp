@@ -49,6 +49,7 @@ MOM::Grid make_spherical_grid(const MOM::Domain &domain, const MOM::GridSpec &sp
   fields.bathyT = MOM::named_topography(domain, topo_config, spec, topo,
                                         fields.geoLonT, fields.geoLatT);
   MOM::initialize_masks(domain, topo, fields.bathyT, fields);
+  MOM::set_derived_metrics(domain, fields);
   return MOM::Grid(std::move(fields));
 }
 
@@ -119,6 +120,14 @@ TEST(Grid, DoubleGyreGridSanity) {
   EXPECT_DOUBLE_EQ(grid.mask2dCv().min(0), 0.0);
   EXPECT_DOUBLE_EQ(grid.mask2dBu().min(0), 0.0);
   EXPECT_DOUBLE_EQ(grid.mask2dBu().max(0), 1.0);
+
+  // The derived metrics are Adcroft reciprocals of the metrics they come
+  // from, and the masked u-cell area vanishes exactly where the mask does.
+  EXPECT_DOUBLE_EQ(grid.IdyT().max(0), 1.0 / grid.dyT().max(0));
+  EXPECT_DOUBLE_EQ(grid.IareaT().max(0), 1.0 / grid.areaT().min(0));
+  EXPECT_DOUBLE_EQ(grid.areaBu().max(0), grid.dxBu().max(0) * grid.dyBu().max(0));
+  EXPECT_DOUBLE_EQ(grid.dy_Cu().min(0), 0.0);   // the closed boundary faces
+  EXPECT_DOUBLE_EQ(grid.IareaCu().min(0), 0.0); // and their zeroed reciprocals
 }
 
 // A flat bottom is uniformly MAXIMUM_DEPTH over the computational domain, so

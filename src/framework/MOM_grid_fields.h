@@ -87,6 +87,27 @@ struct GridFields {
   amrex::MultiFab mask2dCu;  ///< 1 for ocean, 0 for land at u points [nondim].
   amrex::MultiFab mask2dCv;  ///< 1 for ocean, 0 for land at v points [nondim].
   amrex::MultiFab mask2dBu;  ///< 1 for ocean, 0 for land at q points [nondim].
+
+  // The derived metrics of MOM6's set_derived_dyn_horgrid plus the masked
+  // face lengths and areas set at the end of initialize_masks. Every
+  // reciprocal is an Adcroft reciprocal: 1/x, or 0 where x is 0.
+  amrex::MultiFab IdxT;      ///< 1/dxT at h points [L-1 ~> m-1].
+  amrex::MultiFab IdyT;      ///< 1/dyT at h points [L-1 ~> m-1].
+  amrex::MultiFab IareaT;    ///< 1/areaT at h points [L-2 ~> m-2].
+  amrex::MultiFab IdxCu;     ///< 1/dxCu at u points [L-1 ~> m-1].
+  amrex::MultiFab IdyCu;     ///< 1/dyCu at u points [L-1 ~> m-1].
+  amrex::MultiFab IdxCv;     ///< 1/dxCv at v points [L-1 ~> m-1].
+  amrex::MultiFab IdyCv;     ///< 1/dyCv at v points [L-1 ~> m-1].
+  amrex::MultiFab IdxBu;     ///< 1/dxBu at q points [L-1 ~> m-1].
+  amrex::MultiFab IdyBu;     ///< 1/dyBu at q points [L-1 ~> m-1].
+  amrex::MultiFab areaBu;    ///< The area of a q-cell [L2 ~> m2].
+  amrex::MultiFab IareaBu;   ///< 1/areaBu at q points [L-2 ~> m-2].
+  amrex::MultiFab dy_Cu;     ///< The unblocked length of a u face [L ~> m].
+  amrex::MultiFab dx_Cv;     ///< The unblocked length of a v face [L ~> m].
+  amrex::MultiFab areaCu;    ///< The area of a u-cell [L2 ~> m2].
+  amrex::MultiFab areaCv;    ///< The area of a v-cell [L2 ~> m2].
+  amrex::MultiFab IareaCu;   ///< The masked 1/areaCu at u points [L-2 ~> m-2].
+  amrex::MultiFab IareaCv;   ///< The masked 1/areaCv at v points [L-2 ~> m-2].
 };
 
 } // namespace MOM

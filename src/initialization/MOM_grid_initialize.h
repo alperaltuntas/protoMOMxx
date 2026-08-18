@@ -34,4 +34,16 @@ GridFields spherical_grid_fields(const Domain &domain, const GridSpec &spec);
 void initialize_masks(const Domain &domain, const TopoSpec &topo_spec,
                       const amrex::MultiFab &bathyT, GridFields &fields);
 
+/// @brief Compute the reciprocal spacings, the q-cell area, and the masked
+/// face lengths and u/v-cell areas. The analogue of MOM6's
+/// set_derived_dyn_horgrid plus the block at the end of initialize_masks that
+/// sets dy_Cu / dx_Cv / areaCu / areaCv.
+///
+/// Every reciprocal is an Adcroft reciprocal: 1/x where x is nonzero and 0
+/// where it is zero, so that a zero length or area propagates as a zero
+/// rather than an infinity.
+/// @param domain The computational domain the fields are created on.
+/// @param fields The grid fields; the derived fields are created and filled.
+void set_derived_metrics(const Domain &domain, GridFields &fields);
+
 } // namespace MOM

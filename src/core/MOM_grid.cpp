@@ -51,6 +51,16 @@ Grid::Grid(GridFields &&fields)
   check_field(fields_.mask2dCv, "mask2dCv");
   check_field(fields_.mask2dBu, "mask2dBu");
 
+  check_field(fields_.IdxT, "IdxT");
+  check_field(fields_.IareaT, "IareaT");
+  check_field(fields_.IdxCu, "IdxCu");
+  check_field(fields_.IdyCv, "IdyCv");
+  check_field(fields_.areaBu, "areaBu");
+  check_field(fields_.dy_Cu, "dy_Cu");
+  check_field(fields_.dx_Cv, "dx_Cv");
+  check_field(fields_.IareaCu, "IareaCu");
+  check_field(fields_.IareaCv, "IareaCv");
+
   if (!(fields_.max_depth > 0.0)) {
     logger::fatal("Grid: max_depth is not set.");
   }

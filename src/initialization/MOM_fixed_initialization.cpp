@@ -187,14 +187,10 @@ GridFields initialize_fixed(const Domain &domain, RuntimeParams &params) {
               .fail_if_missing = true});
 
   initialize_masks(domain, topo_spec, fields.bathyT, fields);
+  set_derived_metrics(domain, fields);
 
   read_rotation_params(params, spec);
   fields.CoriolisBu = planetary_rotation(domain, spec, fields.geoLatBu);
-
-  // defer: the derived metrics -- the reciprocals (IdxT, IdyCu, IareaT, ...),
-  //        the q-cell area (areaBu) and the u/v-cell area averages
-  //        (areaCu/areaCv) of MOM6's set_derived_dyn_horgrid, until their
-  //        first consumer (the dynamics kernels).
 
   return fields;
 }
