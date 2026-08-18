@@ -1,8 +1,9 @@
 # Throwaway prototype: the double-gyre backbone and dynamical core
 
-Branch `throwaway_dg`, branched off `horGrid`. Nine commits: the remaining
-PRs of `docs/PR_pipeline.md` (5-9), then a working subset of the dynamical
-core, then the verification scaffolding the comparison needed.
+Branch `throwaway_dg`, branched off `horGrid`: the remaining PRs of
+`docs/PR_pipeline.md` (5-9), then a working subset of the dynamical core, then
+the verification scaffolding the comparison needed, then `ocean.stats` and the
+work that closing the bit-for-bit gap took.
 
 The point of the exercise was not the code. It was to find out where the
 design bends under the weight of the dynamics, how far bit-for-bit parity
@@ -21,17 +22,51 @@ with legacy MOM6 actually goes, and what the remaining work costs.
 | `ba12efc` | The derived grid metrics deferred at PR 4 |
 | `44cb557` | The dynamical core: unsplit RK2 + continuity/Coriolis/pressure/viscosity |
 | `ae258ed` | `NBOXES`, so layout independence is testable without MPI |
+| (new) | `MOM_coms`: the order-invariant global sum (Hallberg & Adcroft 2014) |
+| (new) | `MOM_sum_output`: `ocean.stats`, byte-compatible with MOM6's |
+| (new) | The bit-for-bit fixes of section 2 |
 
-New code, this branch: about 2,700 lines. The dynamics is 1,903 of them,
+New code, this branch: about 3,700 lines. The dynamics is 1,903 of them,
 against 18,555 lines in the seven MOM6 modules it corresponds to. Most of
-that ratio is options protoMOMxx rejects rather than implements.
+that ratio is options protoMOMxx rejects rather than implements. `ocean.stats`
+and the reproducing sum are a further 900.
 
 The configuration that runs end to end is the double-gyre testcase with
-`SPLIT = False`, `USE_RK2 = True`, `PRESSUREFORCE = "Montgomery"`,
-`BIHARMONIC = False`, `DT = 300`. The last two deviations are forced:
-the biharmonic branch is not ported, and the unsplit scheme resolves the
+`SPLIT = False`, `USE_RK2 = True`, `ANALYTIC_FV_PGF = False`,
+`BIHARMONIC = False`, `DT = DT_FORCING = 300`. The last three deviations are
+forced: the biharmonic branch is not ported; the unsplit scheme resolves the
 external gravity wave explicitly, so MOM6 itself is unstable here at the
-testcase's 1200 s step.
+testcase's 1200 s step; and MOM6 recalculates the bottom boundary layer once
+per forcing cycle rather than once per dynamics step, so its answer depends on
+`DT_FORCING` (see section 2).
+
+### `ocean.stats`
+
+The ASCII energy file is written by `src/diagnostics/MOM_sum_output`, the
+analogue of MOM6's `write_energy`, and it is byte-compatible with MOM6's:
+the same columns, the same Fortran edit descriptors, the same save cadence.
+Three pieces had to come with it, and all three are reusable:
+
+- **`MOM_coms`**, the extended-fixed-point sum of Hallberg & Adcroft (2014).
+  A real number is held as six 64-bit integers, so adding terms is integer
+  addition, which is exact and associative. This is `DESIGN.md` section 5's
+  reduction service, and it is what makes a global sum independent of the
+  decomposition. About 190 lines, and unit-tested for exactness, order
+  invariance and layout independence.
+- **The hypsometry**, MOM6's depth list: the globally sorted bottom depths
+  with the open area and open volume below each, used to find the depth each
+  layer's volume would rest at and hence the available potential energy. It
+  needs MOM6's indexed heapsort transcribed rather than replaced, because the
+  order of equal depths decides the order the areas are accumulated in and so
+  shows up in the last digits.
+- **The velocity truncation** (MOM6's `vertvisc_limit_vel`), which caps
+  velocities at `CFL_TRUNCATE` and counts what it capped. It never fires in
+  this testcase, but without it the two models would part company as soon as a
+  run went unstable, and the `Truncs` column would be a lie.
+
+The first line of both models' `ocean.stats` -- energy, CFL, mean sea level and
+total mass at step 0 -- is byte-identical, which exercises the whole of the
+above against MOM6 in one comparison.
 
 ## 2. Bit-for-bit parity with legacy MOM6
 
@@ -41,51 +76,163 @@ protoMOMxx, same 44x40x2 configuration, one rank.
 **The fixed initialization is bit-identical.** Every field in MOM6's
 `ocean_geometry.nc` -- `geolat`/`geolon` at h/u/v/q, `dxT`, `dyT`, `dxCu`,
 `dyCu`, `dxCv`, `dyCv`, `dxBu`, `dyBu`, `Ah`, `D`, `wet`, `f` -- matches
-exactly at every point (1,760 to 1,845 points each, zero mismatches). MOM6's
-own bit-count checksums agree too: `areaT` 53108, `dxT` 53284.
+exactly at every point. MOM6's own bit-count checksums agree too: `areaT`
+53108, `dxT` 53284, initial `h` 82985.
 
-**The initial state is bit-identical**: `h` checksum 82985.
+**The prognostic state is bit-identical for 108 dynamics steps** -- nine
+simulated hours. Every value of `u`, `v` and `h`, at every point, matches
+MOM6's per-step diagnostic output exactly through step 108; the first
+difference is one thickness value, one ulp, at step 109.
 
-**The dynamics agrees to roundoff for a few steps, then diverges
-exponentially**, which is what a chaotic system does with a roundoff-level
-seed:
+**Ten simulated days agree to roundoff.** `ocean.stats`, written by both
+models, is byte-identical at step 0, and thereafter the energy per unit mass
+agrees to about 1e-13 relative while the CFL, mean sea level and total mass
+columns stay byte-identical:
 
-| dynamics steps | max(u) rel. diff | min(v) rel. diff | max(h) rel. diff |
+| dynamics steps | max rel. diff, u | max rel. diff, h | rel. diff in reported energy |
 |---:|---:|---:|---:|
-| 2 | 1.2e-13 | 1.5e-16 | 3.0e-14 |
-| 10 | 7.2e-15 | 0 | 1.0e-13 |
-| 50 | 2.9e-10 | 2.9e-10 | 1.1e-12 |
-| 288 (1 day) | 1.8e-07 | 2.9e-07 | 4.3e-13 |
+| 1 - 108 | 0 | 0 | 0 at step 0 |
+| 200 | 7.5e-12 | 8.0e-16 | -- |
+| 288 (1 day) | 7.7e-12 | 1.0e-15 | 2.4e-13 |
+| 2880 (10 days) | -- | -- | 4.9e-14 |
 
-The first stage that differs is the pressure force, by about 1e-13 relative.
-The difference is a few ulp at interior points and larger at the domain-edge
-faces, where the Montgomery potential differences involve heavy cancellation.
-It is not yet localized further.
+Getting there took several fixes, and the interesting thing about them is that
+only two are numerical errors.
 
-Three specification details had to be matched before even the initialization
-agreed, and none of them is visible in the equations:
+### The reference was running a different scheme
 
-- **Floating-point contraction must *match* the Fortran side, not be turned
-  off.** Adding `-ffp-contract=off` to protoMOMxx alone moved `bathyT` away
-  from MOM6, because the reference gfortran build contracts. `DESIGN.md` §5
-  already says "matched FMA contraction"; the prototype confirms the word
-  that matters is *matched*. The build option is now `PROTOMOM_NO_FP_CONTRACT`,
-  default off.
+protoMOMxx read a parameter called `PRESSUREFORCE`, a string with values
+`"FV"` and `"Montgomery"`. MOM6 has no such parameter: it selects the pressure
+gradient with `ANALYTIC_FV_PGF`, a Boolean that defaults to true. So
+`#override PRESSUREFORCE = "Montgomery"` in the MOM6 side of the comparison
+was read by nothing, MOM6 ran the finite-volume form, and protoMOMxx ran the
+Montgomery form. The two agree analytically for a layered adiabatic Boussinesq
+ocean and differ in their discretization, which is why the symptom looked like
+a small kernel error -- about 1e-13 in the pressure force at the first step --
+rather than the wrong equation.
+
+That cost most of the debugging time in this exercise, and the lesson is
+narrow and practical: **an invented parameter name is worse than an
+unimplemented option, because MOM6 does not complain about an override it
+never reads.** The parameter is now `ANALYTIC_FV_PGF`, with the same name,
+type, default and description as MOM6's, and protoMOMxx aborts when it is
+true. Every parameter protoMOMxx reads should be checked against MOM6's, and
+that check is mechanical: the names appear side by side in the two
+`MOM_parameter_doc.all` files.
+
+### Two real errors
+
+`set_viscous_BBL` was being called with `h_av`, the half-step thickness, and
+from inside the time stepping scheme. MOM6 calls it from `step_MOM` before the
+scheme runs, with the thickness at the start of the step. The two agree at the
+first step, when `h_av` is `h`, and diverge afterwards.
+
+The continuity solver floored the updated thickness at zero. MOM6 floors it at
+one Angstrom, in both the zonal and the meridional pass. It does not bind in
+this configuration, so it cost nothing here and would have cost a great deal
+somewhere else.
+
+A third, smaller one is worth its own line because of what it says about
+transcription. `GV%H_subroundoff` -- the thickness MOM6 adds to a denominator
+so that a vanishing layer does not divide by zero -- had been transcribed as
+the literal `1.0e-30`. MOM6 computes it as `1e-20 * max(Angstrom, 1e-17)`,
+which at the default Angstrom is **not** the same double: it is one ulp below
+`1e-30`. The value appears in the horizontal viscosity, the vertical friction,
+the bottom boundary layer and the potential vorticity denominator, and in the
+last of those it is what a vanishing layer's thickness is compared against. A
+constant that "obviously" equals a decimal literal is not a constant, it is an
+expression.
+
+### Floating-point contraction has to be matched expression by expression
+
+`DESIGN.md` section 5 says "matched FMA contraction", and the earlier draft of
+this document read that as a build flag. It is not. Both compilers fuse
+`a*b + c` into an FMA at `-O`, but contraction only ever happens inside a
+single expression, and the two models write the same formula with different
+expression boundaries:
+
+- Where MOM6 writes an intermediate into an array before using it, gfortran
+  cannot fuse across the store. `MOM_CoriolisAdv`, `MOM_continuity_PPM` and
+  `MOM_hor_visc` do this for nearly everything they compute -- `dvdx`, `dudy`,
+  `rel_vort`, `KEx`, the strain rates, the PPM edge values -- so gfortran
+  contracts almost nothing in them, while the same quantities written as C++
+  locals are fused into whatever comes next. Those three files are compiled
+  with `-ffp-contract=off`.
+- Inside each of them there are a few single statements gfortran *does*
+  contract, and those are written out as `std::fma`: the outer sum of the
+  stress divergence in `diffu`/`diffv`, and two expressions in the continuity
+  solver's positive-definite limiter. Three call sites in about four thousand
+  lines.
+- Where MOM6 reads and writes the same array element in one statement --
+  `u(I,j,k) = u(I,j,k) + I_Hmix*hfr*stress` in `vertvisc` -- gfortran also
+  declines to fuse, and g++ does. `MOM_fp_contract.h` adds an empty-asm barrier
+  for that one.
+- Everywhere else contraction must stay **on**: a build-wide
+  `-ffp-contract=off` moves the fixed initialization *away* from MOM6.
+
+The cost is about 4% of the main loop, which is what disabling contraction in
+the three kernels buys back in rounding fidelity.
+
+This is the least portable thing in the branch, and it should be recorded as a
+cost of the parity requirement rather than hidden. It also gives a design
+rule with teeth: **transcribe MOM6's statement boundaries, not just its
+formulas.** An intermediate that MOM6 stores in an array is part of the
+numerical contract.
+
+Finding which expressions those are is not guesswork. Given a stage whose
+inputs are known bit-for-bit -- and after the first step, every input to every
+kernel is -- the fusion pattern can be *solved for*: reimplement the kernel in
+Python with exact (rational) fused multiply-add, enumerate the placements, and
+score each against MOM6's own output. That is how the horizontal viscosity was
+closed (one FMA, in the outer sum of the stress divergence, and nothing else in
+the routine) and how the continuity solver was closed (two FMAs, both inside
+the positive-definite limiter, and nothing else). Each search took seconds and
+returned an exact match on every point.
+
+What survives is smaller than the tool can see. The Coriolis term at v points
+differs from MOM6 by two or three population counts at the second step, at
+points in the vanishing bottom layer over the shelf, and its minima, maxima and
+every other stage of the step agree exactly. It is not localizable further,
+because MOM6 posts no diagnostic for `CAv` and none for the intermediate
+transports the predictor stage uses, so there is no pointwise reference to
+solve against -- only a checksum, which is too weak to discriminate. The
+prognostic state absorbs it: `u`, `v` and `h` stay bit-identical for another
+hundred steps.
+
+### MOM6's answer depends on DT_FORCING
+
+With `ADIABATIC = True`, MOM6 recalculates the bottom boundary layer only when
+`bbl_time_int > 0`, which for the solo driver means once per forcing cycle,
+not once per dynamics step. Running the same configuration with
+`DT_FORCING = 600` and `DT_FORCING = 300` changes MOM6's own answer by 2e-7
+over a day. `Model::step` has no notion of a cycle and recalculates every
+step, which is MOM6's behaviour when the two timesteps are equal, so the
+testcase now sets them equal.
+
+This is a genuine gap, not a bookkeeping detail: MOM6's `step_MOM` carries
+`start_cycle`/`end_cycle`/`cycle_length` through the whole call and several
+subsystems change behaviour on them. protoMOMxx's `step(forces, dt_forcing,
+n_steps)` has thrown that away, and the cycle will have to come back before
+the thermodynamic timestep does.
+
+### Three specification details, unchanged from the earlier draft
+
 - **Halo fill values are part of the numerical contract.** MOM6 allocates `h`
-  at `GV%Angstrom_H`, not zero. Since the thickness configurations write only
-  the computational domain, that value is what the halo outside the global
-  domain keeps, and the boundary pressure gradients are computed from it.
-  Filling with zero instead changed boundary values by 4e-10 relative.
+  at `GV%Angstrom_H`, not zero, and the thickness configurations write only
+  the computational domain, so that value is what the halo outside the global
+  domain keeps and what the boundary pressure gradients are computed from.
 - **MOM6 reports a velocity field over its non-symmetric index range**, which
-  drops the low boundary face. Comparing statistics without reproducing that
-  range produces differences that look like bugs and are not.
+  drops the low boundary face. Reproducing that range is what makes the
+  stage-by-stage checksum comparison usable.
+- **The Adcroft reciprocal** (`1/x`, or 0 where `x` is 0) is a convention, not
+  an optimization, and it appears in every derived metric.
 
-**Conclusion on parity:** it is achievable, and it already holds for
-everything up to the first kernel. Closing the last 1e-13 in the kernels is
-ordinary work, but it needs the stage-by-stage comparison as a standing tool.
-`report_field` (MOM6's statistics ranges and bit-count checksum, reproduced
-exactly) is that tool and should move into the mainline before the dynamics
-PRs, not after.
+**Conclusion on parity:** it is achievable and it was achieved -- exactly for
+the first 108 dynamics steps, and to roundoff for ten simulated days. What it
+costs is a parity harness used continuously, a discipline about parameter
+names, and per-expression attention to contraction. None of that is
+discoverable by reading the Fortran, and all of it is mechanical once the
+harness exists.
 
 ## 3. Layout independence
 
@@ -99,20 +246,25 @@ convention translation -- MOM6's `I = i-1` face labelling, the loop bounds,
 the halo widths each kernel reads -- came out right on the first try, and
 AMReX's decomposition and halo exchange needed no special handling.
 
-The domain *means* differ in their last digits across box counts, because the
-global sum is not reproducing. That is the reduction service of `DESIGN.md`
-§5, and it is not built.
+The reduction service of `DESIGN.md` §5 is now built (`MOM_coms`), and with it
+`ocean.stats` is **byte-identical across `NBOXES` = 1, 2, 4, 8 and 16** for the
+whole ten-day run, global means included. The earlier draft recorded the
+missing reproducing sum as the one place layout independence did not hold; it
+now holds everywhere that is testable without MPI.
 
 ## 4. Performance
 
-44x40x2, 2,880 dynamics steps, one rank, gcc 14.3 `-O2`:
+44x40x2, 2,880 dynamics steps, one rank, gcc 14.3, MOM6 at its own release
+flags and protoMOMxx at `-O3`:
 
 | | main loop | per step |
 |---|---:|---:|
-| MOM6 | 3.955 s | 1.373 ms |
-| protoMOMxx | 2.197 s | 0.763 ms |
+| MOM6 | 4.038 s | 1.402 ms |
+| protoMOMxx | 2.362 s | 0.820 ms |
 
-protoMOMxx is **1.8x faster**. Read that carefully:
+Both runs write `ocean.stats` and no other output. protoMOMxx is **1.7x
+faster**, after paying about 4% for the disabled contraction of section 2.
+Read that carefully:
 
 - MOM6's diagnostics cost only 2.7% here (measured by running with an empty
   `diag_table`), so their absence is not the explanation.
@@ -145,7 +297,7 @@ created" check caught two omissions the moment a test ran.
 
 **Deferred branches abort (§9).** This is the highest-value convention in the
 document, by a wide margin. Running the stock double-gyre configuration
-walked the prototype from fatal to fatal: `SPLIT`, then `PRESSUREFORCE`, then
+walked the prototype from fatal to fatal: `SPLIT`, then `ANALYTIC_FV_PGF`, then
 `BIHARMONIC`, then `HARMONIC_VISC`, then `LINEAR_DRAG`. Every one of those was
 a parameter that would otherwise have silently taken a default the code does
 not implement. The set of live aborts is, in effect, a machine-checked list of
@@ -244,17 +396,20 @@ the exit path.
 
 ## 6. Refined plan for the full double-gyre
 
-To run the stock configuration (`SPLIT = True`, `PRESSUREFORCE = "FV"`,
+To run the stock configuration (`SPLIT = True`, `ANALYTIC_FV_PGF = True`,
 biharmonic viscosity, `DT = 1200`), in dependency order:
 
 1. **Types layer split** -- `Grid`, `VerticalGrid`, `State`, `MechForcing`
    below `src/initialization` and `src/parameterizations`. Small; do it first,
    before more code is written against the current graph.
 2. **Parity harness** -- `report_field` plus a script that diffs a protoMOMxx
-   log against a MOM6 `DEBUG` log stage by stage, in CI. About 200 lines. This
-   made the exercise tractable and belongs before the dynamics, not after.
-   `PR_pipeline.md` currently schedules the checksum oracle at PR 7; it should
-   be its own PR and it should reproduce MOM6's ranges exactly.
+   log against a MOM6 `DEBUG` log stage by stage, in CI. About 200 lines, and
+   the diff script is another 60. This made the exercise tractable and belongs
+   before the dynamics, not after. `PR_pipeline.md` currently schedules the
+   checksum oracle at PR 7; it should be its own PR, it should reproduce MOM6's
+   ranges exactly, and it should also diff the two `MOM_parameter_doc.all`
+   files, because the largest error found here was a parameter name that only
+   one of the two models had.
 3. **Typed field residency** -- layer versus interface versus 2-D, and stagger,
    in the type system. The one crash of this exercise is a compile error under
    it.
@@ -269,9 +424,11 @@ biharmonic viscosity, `DT = 1200`), in dependency order:
 7. **`MOM_PressureForce_FV`** -- needs `MOM_density_integrals`; a reduced form
    is possible for the layered no-EOS case.
 8. **Biharmonic horizontal viscosity** -- about 400 lines of `MOM_hor_visc`.
-9. **Diagnostics and `ocean.stats`** -- needed for energy-level comparison,
-   and needs the reproducing-sum service, which is also what makes the domain
-   means layout-independent.
+9. **Diagnostics** -- the NetCDF side, through TIM. `ocean.stats` and the
+   reproducing sum it needs are now built (`MOM_sum_output`, `MOM_coms`) and
+   should move to the mainline early: it is the cheapest whole-model
+   comparison there is, it proved layout independence of the global means, and
+   it is what surfaced the `DT_FORCING` behaviour above.
 10. **Restart** -- needed for the restart-exactness invariant of §5.
 
 Not needed for double-gyre and correctly deferred: non-linear bottom drag,
@@ -294,21 +451,39 @@ five unimplemented options is worse than no prototype, because it launders
 missing work into apparent progress.
 
 **Parity against the reference is a design tool, not just a verification
-tool.** The bit-level comparison surfaced four specification details -- the
-halo fill value, contraction matching, MOM6's reporting ranges, the Adcroft
-reciprocal convention -- that no amount of reading the Fortran produced. Each
-one would have been discovered eventually, at much higher cost, inside a
-science bug.
+tool.** The bit-level comparison surfaced specification details -- the halo
+fill value, per-expression contraction, MOM6's reporting ranges, the Adcroft
+reciprocal, the forcing-cycle dependence of the bottom boundary layer -- that
+no amount of reading the Fortran produced. Each one would have been discovered
+eventually, at much higher cost, inside a science bug.
+
+**The reference has to be pinned as hard as the port.** The single largest
+error in this exercise was on the MOM6 side: an override MOM6 silently ignored,
+so the two models ran different pressure gradients for the whole comparison. A
+harness that only compares outputs cannot see that. What would have caught it
+in a minute is a diff of the two `MOM_parameter_doc.all` files.
+
+**"Matched contraction" is a per-expression property, and it is solvable.** It
+was written down as a build flag and it is not one. What has to match is where
+each model rounds, and that is set by where MOM6 stores an intermediate in an
+array. A transcription that preserves MOM6's formulas but collapses its
+statements into one expression will not reproduce it, and no build flag fixes
+that. But it does not have to be guessed either: with the inputs to a kernel
+known bit-for-bit, reimplementing it in Python with exact fused multiply-add
+and enumerating the placements finds the pattern that reproduces MOM6 on every
+point, in seconds. That technique should be part of the parity harness, not a
+one-off.
 
 **The cost is now measurable.** Backbone plus a working subset dynamical core:
-about 2,700 lines over nine commits. That is small enough that discarding it
-is genuinely affordable, and small enough that the estimate for the full
+about 3,700 lines. That is small enough that discarding it is
+genuinely affordable, and small enough that the estimate for the full
 double-gyre -- dominated by the barotropic solver at three to five times this
 size -- is credible rather than a guess.
 
 **What to keep from the throwaway:** `MOM_loop_boxes.h`, `report_field` and
-its MOM6-compatible checksum, the `NBOXES` layout test, the contraction
-finding, and the inventory of live aborts. **What to throw away:** the kernels
+its MOM6-compatible checksum, `MOM_coms` and `MOM_sum_output` (both faithful to
+MOM6 and both cheap to test), the `NBOXES` layout test, the contraction
+findings, and the inventory of live aborts. **What to throw away:** the kernels
 themselves. They should be re-derived on top of the units layer and the typed
 fields, not retrofitted -- retrofitting numerics is exactly what §6 warns
 against.
@@ -321,3 +496,9 @@ against.
 - **GPU.** Not attempted.
 - **Restart exactness and rotational symmetry**, two of the four §5
   invariants; neither has an implementation to test.
+- **The bit-for-bit result on another machine or compiler.** The contraction
+  matching of §2 is specific to this pair of builds. A different `-march`, a
+  different GCC, or a non-GNU compiler will move the fusion decisions again.
+  Whether MOM6 parity should be claimed per build pair, or whether both models
+  should be built with contraction off for the comparison, is a decision the
+  project has not made and should.
