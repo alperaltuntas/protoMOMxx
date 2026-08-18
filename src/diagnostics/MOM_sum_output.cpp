@@ -10,6 +10,7 @@
 #include <AMReX_ParallelReduce.H>
 
 #include "MOM_fields.h"
+#include "MOM_fp_contract.h"
 #include "MOM_logger.h"
 #include "MOM_loop_boxes.h"
 
@@ -399,9 +400,14 @@ void SumOutput::write_energy(const State &state, const Domain &domain, const Gri
     const amrex::Array4<const amrex::Real> area = grid.areaT().const_array(mfi);
     amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
       const amrex::Real areaTm = mask(i, j, 0) * area(i, j, 0);
+      // gfortran does not contract MOM6's u(I-1)**2 + u(I)**2, so the squares
+      // are held back from the sum here too. The terms go into a fixed-point
+      // sum, which turns a last-bit difference into a different reported total.
       t(i, j, k) = (0.25 * H_to_RZ * (areaTm * h(i, j, k))) *
-                   (((u(i, j, k) * u(i, j, k)) + (u(i + 1, j, k) * u(i + 1, j, k))) +
-                    ((v(i, j, k) * v(i, j, k)) + (v(i, j + 1, k) * v(i, j + 1, k))));
+                   ((fp_rounded(u(i, j, k) * u(i, j, k)) +
+                     fp_rounded(u(i + 1, j, k) * u(i + 1, j, k))) +
+                    (fp_rounded(v(i, j, k) * v(i, j, k)) +
+                     fp_rounded(v(i, j + 1, k) * v(i, j + 1, k))));
     });
   }
   const amrex::Real KE_tot = reproducing_sum(work);
