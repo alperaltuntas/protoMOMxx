@@ -8,21 +8,10 @@
 #include "MOM_domain_infra.h"
 #include "MOM_file_parser.h"
 #include "MOM_grid.h"
+#include "MOM_state.h"
 #include "MOM_vertical_grid.h"
 
 namespace MOM {
-
-/// @brief Scales input to be within necessary bounds
-/// @param x Global index
-/// @param x_min x min
-/// @param x_max x max
-/// @param xi_min grid x min
-/// @param xi_max grid x max
-/// @return Index within scaled space for local grid
-AMREX_GPU_DEVICE AMREX_FORCE_INLINE
-amrex::Real LinearMapCoordinates(const amrex::Real x,
-                                 const amrex::Real x_min, const amrex::Real x_max,
-                                 const amrex::Real xi_min, const amrex::Real xi_max);
 
 /// @brief The Model class is the main interface of the MOM core: it owns the
 /// model state and subsystems and provides the entry points the driver calls.
@@ -31,9 +20,7 @@ amrex::Real LinearMapCoordinates(const amrex::Real x,
 /// MOM6's initialize_MOM (src/core/MOM.F90). The constructor is decomposed
 /// into phases that mirror the topology of MOM6's initialize_MOM where each
 /// remaining phase is currently a stub that will be filled in by upcoming PRs
-/// (VerticalGrid, State, Dynamics). The initialize_state stub runs
-/// the original psi (stream function) demo, which exercises the AMReX machinery
-/// its real replacement will use.
+/// (Dynamics).
 class Model {
 public:
   /// @brief Scalar configuration switches of the model (the analogue of the
@@ -67,6 +54,10 @@ public:
   /// @return Const reference to the model's vertical grid.
   const VerticalGrid &vertical_grid() const { return vgrid_; }
 
+  /// @brief Read-only access to the prognostic state.
+  /// @return Const reference to the model's prognostic state.
+  const State &state() const { return state_; }
+
 private:
   // config_ initialization must precede domain_: its initializer sets the log 
   // verbosity in effect for the later initializers' messages.
@@ -84,22 +75,17 @@ private:
   /// gravities, and the layer target densities.
   VerticalGrid vgrid_;
 
+  /// @brief The prognostic state: the layer thicknesses and the horizontal
+  /// velocity components.
+  State state_;
+
   /// @brief Read the scalar configuration switches into a Config object.
   static Config read_config_switches(RuntimeParams &params);
-
-  /// @brief Initialize the prognostic state (u, v, h, ...). Analogue of
-  /// MOM6's MOM_initialize_state. (stub -- currently runs the original psi
-  /// demo to exercise the AMReX machinery.)
-  void initialize_state(RuntimeParams &params);
 
   /// @brief Initialize the dynamics subsystem for the configured time
   /// stepping scheme. Analogue of MOM6's register_restarts_dyn_* +
   /// initialize_dyn_* four-way dispatch. (stub)
   void initialize_dynamics(RuntimeParams &params);
-
-  /// @brief tmp: fill the psi (stream function) demo field on the domain's
-  /// decomposition. Retires with the demo when the real State arrives.
-  void fill_psi_demo(amrex::MultiFab &psi) const;
 };
 
 } // namespace MOM

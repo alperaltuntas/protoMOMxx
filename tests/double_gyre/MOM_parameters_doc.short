@@ -73,3 +73,5 @@ GFS = 0.98                      !   [m s-2] default = 9.8
                                 ! The reduced gravity at the free surface.
 GINT = 0.0098                   !   [m s-2]
                                 ! The reduced gravity across internal interfaces.
+
+! === module MOM_state_initialization ===

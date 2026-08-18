@@ -91,6 +91,8 @@ RHO_0 = 1035.0                  !   [kg m-3] default = 1035.0
                                 ! some parameters from vertical units of m to kg m-2.
 BOUSSINESQ = True               ! default = True
                                 ! If true, make the Boussinesq approximation.
+ANGSTROM = 1.0e-10              !   [m] default = 1.0e-10
+                                ! The minimum layer thickness, usually one-Angstrom.
 NK = 2                          !   [nondim]
                                 ! The number of model layers.
 
@@ -119,3 +121,26 @@ GINT = 0.0098                   !   [m s-2]
                                 ! The reduced gravity across internal interfaces.
 LIGHTEST_DENSITY = 1035.0       !   [kg m-3] default = 1035.0
                                 ! The reference potential density used for layer 1.
+
+! === module MOM_state_initialization ===
+THICKNESS_CONFIG = "uniform"    ! default = "uniform"
+                                ! A string that determines how the initial layer thicknesses are specified for a
+                                ! new run:
+                                !    file - read interface heights from the file specified
+                                !      by (THICKNESS_FILE).
+                                !    thickness_file - read thicknesses from the file specified
+                                !      by (THICKNESS_FILE).
+                                !    uniform - uniform thickness layers evenly distributed
+                                !      between the surface and MAXIMUM_DEPTH.
+                                !    list - read a list of positive interface depths.
+                                !    param - use thicknesses from parameter THICKNESS_INIT_VALUES.
+                                !    USER - call a user modified routine.
+VELOCITY_CONFIG = "zero"        ! default = "zero"
+                                ! A string that determines how the initial velocities are specified for a new
+                                ! run:
+                                !    file - read velocities from the file specified
+                                !      by (VELOCITY_FILE).
+                                !    zero - the fluid is initially at rest.
+                                !    uniform - the flow is uniform (determined by
+                                !      parameters INITIAL_U_CONST and INITIAL_V_CONST).
+                                !    USER - call a user modified routine.

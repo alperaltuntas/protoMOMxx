@@ -2,6 +2,7 @@
 add_library(MOM_src_core
   MOM.cpp
   MOM_grid.cpp
+  MOM_state.cpp
   MOM_vertical_grid.cpp
 )
 

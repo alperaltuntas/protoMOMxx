@@ -90,9 +90,17 @@ VerticalGrid::VerticalGrid(RuntimeParams &params) {
     logger::fatal("VerticalGrid: the non-Boussinesq mode is not implemented.");
   }
 
+  params.get("ANGSTROM", angstrom_,
+             {.default_value = 1.0e-10,
+              .desc = "The minimum layer thickness, usually one-Angstrom.",
+              .units = "m"});
+  if (angstrom_ < 0.0) {
+    logger::fatal("VerticalGrid: ANGSTROM must not be negative.");
+  }
+
   // defer: the remaining verticalGridInit content. SEMI_BOUSSINESQ and
   //        RHO_KV_CONVERT (both only meaningful when BOUSSINESQ is false,
-  //        which aborts above), ANGSTROM and the subroundoff thicknesses,
+  //        which aborts above), the subroundoff thicknesses,
   //        and H_RESCALE_POWER with the thickness-unit conversion factor
   //        family (H_to_m, Z_to_H, ...), all of which will be implemented
   //        with the thickness/units layer, and the mixed-layer layer counts

@@ -57,6 +57,10 @@ public:
   /// @return True if the Boussinesq approximation is made.
   bool Boussinesq() const { return Boussinesq_; }
 
+  /// @brief The minimum layer thickness, usually one Angstrom [H ~> m].
+  /// @return The minimum layer thickness.
+  amrex::Real angstrom() const { return angstrom_; }
+
   /// @brief Reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
   /// The bottom value (index nk) does not matter physically and is set only
   /// to avoid an uninitialized value in output, as in MOM6.
@@ -74,6 +78,7 @@ private:
   amrex::Real g_Earth_ = 0.0;         ///< Gravitational acceleration [L2 Z-1 T-2 ~> m s-2].
   amrex::Real Rho0_ = 0.0;            ///< Boussinesq reference density [R ~> kg m-3].
   bool Boussinesq_ = true;            ///< Whether the Boussinesq approximation is made.
+  amrex::Real angstrom_ = 0.0;        ///< The minimum layer thickness [H ~> m].
   std::vector<amrex::Real> g_prime_;  ///< Interface reduced gravities (nk+1) [L2 Z-1 T-2 ~> m s-2].
   std::vector<amrex::Real> Rlay_;     ///< Layer target densities (nk) [R ~> kg m-3].
 };

@@ -1,0 +1,3 @@
+! Parameter file for the state initialization unit tests.
+THICKNESS_CONFIG = "uniform"
+VELOCITY_CONFIG = "zero"
