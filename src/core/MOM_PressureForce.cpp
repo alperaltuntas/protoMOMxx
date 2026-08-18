@@ -31,6 +31,55 @@ PressureForce::PressureForce(RuntimeParams &params) {
   }
 }
 
+void PressureForce::montgomery_by_column(const amrex::Box &columns, const int nk,
+                                         const amrex::Real *g_prime,
+                                         const amrex::Array4<const amrex::Real> &hh,
+                                         const amrex::Array4<const amrex::Real> &D,
+                                         const amrex::Array4<amrex::Real> &ee,
+                                         const amrex::Array4<amrex::Real> &MM) {
+  // One thread per column, both recursions inside it. H_to_Z is 1 in
+  // Boussinesq mode without unit scaling.
+  amrex::ParallelFor(columns, [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
+    ee(i, j, nk) = -D(i, j, 0);
+    for (int k = nk - 1; k >= 0; --k) {
+      ee(i, j, k) = ee(i, j, k + 1) + hh(i, j, k);
+    }
+    MM(i, j, 0) = g_prime[0] * ee(i, j, 0);
+    for (int k = 1; k < nk; ++k) {
+      MM(i, j, k) = MM(i, j, k - 1) + g_prime[k] * ee(i, j, k);
+    }
+  });
+}
+
+void PressureForce::montgomery_by_plane(const amrex::Box &columns, const int nk,
+                                        const amrex::Real *g_prime,
+                                        const amrex::Array4<const amrex::Real> &hh,
+                                        const amrex::Array4<const amrex::Real> &D,
+                                        const amrex::Array4<amrex::Real> &ee,
+                                        const amrex::Array4<amrex::Real> &MM) {
+  // Nothing calls this; see the header for what it is for. Each step of each
+  // recursion is a kernel over the whole footprint, so the k loop is outside
+  // the kernel and the innermost loop runs along i. Every value is read after
+  // the kernel that wrote it has finished, so the sequence of operations is
+  // the one above, term for term, and the answer is bit-for-bit the same.
+  amrex::ParallelFor(columns, [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
+    ee(i, j, nk) = -D(i, j, 0);
+  });
+  for (int k = nk - 1; k >= 0; --k) {
+    amrex::ParallelFor(columns, [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
+      ee(i, j, k) = ee(i, j, k + 1) + hh(i, j, k);
+    });
+  }
+  amrex::ParallelFor(columns, [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
+    MM(i, j, 0) = g_prime[0] * ee(i, j, 0);
+  });
+  for (int k = 1; k < nk; ++k) {
+    amrex::ParallelFor(columns, [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
+      MM(i, j, k) = MM(i, j, k - 1) + g_prime[k] * ee(i, j, k);
+    });
+  }
+}
+
 void PressureForce::calculate(amrex::MultiFab &PFu, amrex::MultiFab &PFv,
                               const amrex::MultiFab &h, const Domain &domain,
                               const Grid &grid, const VerticalGrid &vgrid) const {
@@ -65,19 +114,11 @@ void PressureForce::calculate(amrex::MultiFab &PFu, amrex::MultiFab &PFv,
     const amrex::Array4<amrex::Real> MM = M.array(mfi);
     const amrex::Array4<amrex::Real> ee = e.array(mfi);
 
-    // Both recursions run in one thread per column: the interface heights
-    // build upward from the bottom, and the Montgomery potential downward
-    // from the surface. H_to_Z is 1 in Boussinesq mode without unit scaling.
-    amrex::ParallelFor(columns, [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
-      ee(i, j, nk) = -D(i, j, 0);
-      for (int k = nk - 1; k >= 0; --k) {
-        ee(i, j, k) = ee(i, j, k + 1) + hh(i, j, k);
-      }
-      MM(i, j, 0) = g_prime[0] * ee(i, j, 0);
-      for (int k = 1; k < nk; ++k) {
-        MM(i, j, k) = MM(i, j, k - 1) + g_prime[k] * ee(i, j, k);
-      }
-    });
+    // The interface heights build upward from the bottom and the Montgomery
+    // potential downward from the surface. montgomery_by_plane() is the same
+    // computation with the loops inverted, and swapping the two here is the
+    // only change that experiment needs.
+    montgomery_by_column(columns, nk, g_prime, hh, D, ee, MM);
   }
 
   for (amrex::MFIter mfi(h); mfi.isValid(); ++mfi) {

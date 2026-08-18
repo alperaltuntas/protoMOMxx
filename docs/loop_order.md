@@ -172,16 +172,27 @@ walk worse: a larger grid makes each `k` step a bigger jump, and a deeper
 column makes more of them. At the largest point the routine is 9% of
 protoMOMxx's main loop and 0.7% of MOM6's.
 
-Rewriting just this kernel as shape B, with no other change:
+Both traversals are in the tree: `PressureForce::montgomery_by_column` is what
+`calculate` uses and `PressureForce::montgomery_by_plane` is the alternative,
+uncalled. Swapping the one call is the whole experiment. Measured at `-O2`,
+best of three 480-step runs:
 
 | | shape A | shape B | MOM6 |
 |---|---:|---:|---:|
-| 44x40x2 | 10.22 | **3.23** | 2.0 |
-| 44x40x64 | 19.08 | **8.29** | 2.4 |
+| 44x40x2 | 10.30 | **3.20** | 2.0 |
+| 44x40x64 | 14.12 | **8.20** | 2.4 |
 
-(A separate 480-step pair of runs, which is why the shape-A column differs by a
-few percent from the sweep table above.) 2.3x to 3.2x, and `ocean.stats` is
-byte-for-byte unchanged, as the identical arithmetic requires. The residue over MOM6 is not loop order: it is two
+1.7x to 3.2x, and `ocean.stats` is byte-for-byte unchanged, as the identical
+arithmetic requires.
+
+One incidental result from putting the two side by side. Before the two
+traversals were separate functions, the by-column form measured 18.93 ns at 64
+layers rather than 14.12 -- **moving the kernel out of `calculate` into a
+function of its own was worth 25% on its own**, reproducibly, with no change to
+the loop at all. That is the same function-size-against-the-inliner effect
+`MOM_kernel_inline.h` exists for, met from the other direction, and it is worth
+remembering when reading any single before-and-after number here: two effects
+are in play and only one of them is loop order. The residue over MOM6 is not loop order: it is two
 `MultiFab` allocations plus `setVal(0.0)` and a `Gpu::DeviceVector` copy of
 `g_prime`, all performed **per timestep**, which want hoisting into the object.
 
@@ -225,9 +236,10 @@ teams)` to work around an nvhpc memory error -- the same inlining wall
 
 ## What this implies here
 
-1. **The pressure force should be shape B.** It is a measured 2.3-3.2x on the
-   CPU for a rewrite that cannot change the answer. It costs GPU-friendliness,
-   which is the next point.
+1. **The pressure force should be shape B.** It is a measured 1.7-3.2x on the
+   CPU for a rewrite that cannot change the answer, and the alternative is
+   already written -- `montgomery_by_plane` needs a caller, not an author. It
+   costs GPU-friendliness, which is the next point.
 2. **Loop shape should be a policy, not a literal.** MOM6 can pick its
    traversal at run time; protoMOMxx cannot, because whether the `k` loop sits
    inside or outside the lambda is written into each kernel. AMReX supplies the
@@ -255,6 +267,7 @@ python3 /path/to/turbo-prof/scripts/generators/gen_protomomxx_sweep_report.py \
 ```
 
 See `turbo-prof/docs/PROTOMOMXX_SWEEP.md` for the two axes and what is held
-fixed. The shape-A/shape-B comparison is the sweep run twice against two
-builds that differ only in `src/core/MOM_PressureForce.cpp`; the check that it
-is the same computation is that `ocean.stats` does not move.
+fixed. The shape-A/shape-B comparison is two builds whose
+only difference is which of `montgomery_by_column` / `montgomery_by_plane` the
+one call site in `PressureForce::calculate` names; the check that it is the
+same computation is that `ocean.stats` does not move.
