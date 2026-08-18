@@ -180,11 +180,9 @@ expression boundaries:
 Disabling contraction in the three kernels costs about 2% of the main loop
 (see §4).
 
-This is the least portable thing in the branch, and it should be recorded as a
-cost of the parity requirement rather than hidden. It also gives a design
-rule with teeth: **transcribe MOM6's statement boundaries, not just its
-formulas.** An intermediate that MOM6 stores in an array is part of the
-numerical contract.
+It also gives a design rule with teeth: **transcribe MOM6's statement
+boundaries, not just its formulas.** An intermediate that MOM6 stores in an
+array is part of the numerical contract.
 
 Two more sites turned up at the end of the exercise, and they are worth
 stating because they are the two directions the mistake can go. gfortran
@@ -197,6 +195,33 @@ is why it took 109 steps to surface. gfortran *does not* contract
 need the barrier. The kinetic energy terms go into a fixed-point sum, which
 quantises most last-bit differences away, so a wrong term appeared as one
 wrong day in ten rather than as a wrong number every day.
+
+### ...and then it was made unnecessary
+
+Everything above is what it takes to match a Fortran build that contracts. The
+branch no longer does it that way. Both sides now disable contraction, and the
+five `std::fma` calls, the `fp_rounded` barrier and `MOM_fp_contract.h` itself
+are gone.
+
+The reason is that gnu was the only toolchain that needed any of it. MOM6's
+intel and nvhpc mkmf templates already pass `-no-fma` and `-Mnofma`; only
+`ncar-gnu.mk` left gfortran fusing. Adding `-ffp-contract=off` there, and
+making the C++ side disable contraction unconditionally rather than through an
+option, gives a bit-for-bit result against **all three** MOM6 builds -- gnu at
+`-O2` and `-O3`, and the shipped intel and nvhpc binaries untouched -- with
+less code than matching took. The two `MOM6` gnu and intel builds also become
+bit-for-bit with each other, which they were not.
+
+It costs about 2--3% on each side (MOM6 gnu `-O2` 4.55 s -> 4.69 s, protoMOMxx
+`-O3` 2.63 s -> 2.69 s), so the ratio of §4 does not move; under nvhpc
+protoMOMxx gets 10% *faster*, because the `std::fma` calls that `-Mnofma`
+turned into libm calls disappear with them.
+
+That is a change to the reference build, not just to protoMOMxx, and it is the
+decision §8 said the project had not made. What it buys is that parity stops
+being a property of one compiler pair. What the per-expression work above
+bought, and what is kept, is the knowledge of *where* the two models round
+differently -- which is why the transcription rule survives the flag.
 
 Finding which expressions those are is not guesswork. Given a stage whose
 inputs are known bit-for-bit -- and after the first step, every input to every
@@ -317,9 +342,12 @@ picture is not one number but two, and the gap between them is the finding.
 
 At `-O2`, GCC declines to inline the AMReX `ParallelFor` lambda bodies into
 the loop. Every grid point becomes a call, with the captured `Array4`
-descriptors reloaded across it: 75.5 G instructions against 25.5 G at `-O3`,
+descriptors reloaded across it: 59.2 G instructions against 25.4 G at `-O3`,
 and `perf report` shows the lambda `operator()` as separate hot symbols at
-`-O2` and none at `-O3`. Adding
+`-O2` and none at `-O3`. (An earlier draft gave 75.5 G for the `-O2` figure.
+That was the *instrumented* build, whose timer scopes tip yet more kernels
+over the same limit; it measures 78.0 G. The uninstrumented number is the one
+to quote.) Adding
 
     -finline-functions --param max-inline-insns-auto=1000 \
                        --param max-inline-insns-single=1000
@@ -341,9 +369,10 @@ slope, and it sits on the edge of it.** The same fragility showed up when the
 timers of §4.1 were added: the extra scopes are enough to tip several kernels
 from inlined to out-of-line and cost a quarter of the main loop at `-O2`,
 while costing about 1% at `-O3`. A CMake `Release` build is on the right side
-of the cliff, but nothing in the build system says so, and any consumer who
-builds at `-O2` will draw the wrong conclusion about AMReX. The inlining
-options belong in the build.
+of the cliff, but nothing in the build system said so, and any consumer who
+built at `-O2` would draw the wrong conclusion about AMReX. That is now fixed
+in the source rather than with `--param`s: see "Taking the inlining decision
+away from the compiler" below.
 
 ### Where the time goes
 
@@ -378,6 +407,128 @@ The harness that produces this table is on turbo-prof's `throwaway_dg` branch
 configs, so a comparison cannot silently drift into timing two different
 computations.
 
+### The cliff belongs to the compiler, not to the code
+
+Everything above is gcc. Repeating the same measurement with the two other
+toolchains the Fortran side ships templates for -- intel 2025.2 and nvhpc 25.9
+-- says that the `-O2` result is not a property of protoMOMxx at all. Each
+model is built the way its own toolchain builds it: MOM6 from its mkmf
+template (`-O2`, plus `-fp-model source -no-fma -march=core-avx2` for intel
+and `-Kieee -Mnofma -tp=zen3` for nvhpc), and protoMOMxx as a CMake `Release`
+build with the matching contraction and reassociation settings, so the two
+sides round the same way under each compiler. Fastest of five:
+
+| compiler | MOM6 `-O2` | protoMOMxx `-O2` | | protoMOMxx `-O3` | |
+|---|---:|---:|---:|---:|---:|
+| gcc 14.3 | 4.55 s | 5.24 s | 0.87x | 2.63 s | **1.73x** |
+| intel 2025.2 | 4.80 s | 2.73 s | **1.76x** | 2.69 s | **1.79x** |
+| nvhpc 25.9 | 5.28 s | 7.71 s | 0.68x | 6.91 s | 0.76x |
+
+**icpx never falls off the cliff and nvc++ never gets off it.** The one
+number that predicts every row is how many AMReX kernel lambdas the compiler
+leaves out of line, which `nm -C` on the executable counts directly:
+
+| build | out-of-line kernel lambdas | instructions | main loop |
+|---|---:|---:|---:|
+| gcc `-O2` | 19 | 59.2 G | 5.24 s |
+| gcc `-O3` | 0 | 25.4 G | 2.63 s |
+| intel `-O2` | 0 | 23.0 G | 2.73 s |
+| intel `-O3` | 0 | 22.6 G | 2.69 s |
+| nvhpc `-O2` | 26 | 80.9 G | 7.71 s |
+| nvhpc `-O3` | 17 | 71.2 G | 6.91 s |
+
+icpx inlines them at `-O2` already, which is why its `-O2` and `-O3` agree to
+1.5%; the optimization level is not the variable there, and neither is the
+timer instrumentation, which costs under 1% at both levels rather than gcc's
+quarter. nvc++ leaves them out of line at every setting tried: `-tp=zen3`,
+`-O4`, `-fast`, `-Minline=maxsize:1000`, `-Minline=levels:10,maxsize:2000`
+(6.9-7.7 s, none of it a real recovery) and `-Mipa=inline,fast`, which is
+worse at 11.0 s. Compiling one kernel file with nvc++ 26.1 instead of 25.9
+gives an object within 0.6% of the same size, so this is what nvc++ does with
+`ParallelFor`, not a bug in one release. `perf report` on the nvhpc build
+shows the same symbols gcc `-O2` shows -- the lambda `operator()`s and
+AMReX's `call_f_intvect_inner` wrappers, together about half the samples.
+
+Per routine, the split is exactly the one §4 already described, and it holds
+under all three compilers:
+
+| routine | gcc | intel | nvhpc |
+|---|---:|---:|---:|
+| vertical viscosity | 2.38x | 1.86x | 1.20x |
+| set BBL viscosity | 2.28x | 3.32x | 1.34x |
+| continuity | 1.18x | 2.47x | 0.42x |
+| Coriolis & momentum advection | 1.30x | 0.78x | 0.19x |
+| horizontal viscosity | 1.05x | 0.86x | 0.23x |
+| **main loop** | **1.73x** | **1.77x** | **0.68x** |
+
+(protoMOMxx over MOM6; gcc and intel from the level whose timers are honest
+-- `-O3` for gcc, `-O2` for intel -- and nvhpc from `-O2`.)
+
+The two routines protoMOMxx wins on are the ones with large loop bodies, and
+it wins on them under every compiler, including the one that inlines nothing.
+The three it can lose on are the small-bodied kernels, where the per-point
+call is most of the work: they are 1.0-1.3x under gcc, 0.8-2.5x under intel,
+and 0.2-0.4x under nvc++. There is no routine where the ranking is a property
+of the algorithm rather than of what the compiler did with the lambda.
+
+So the recommendation of §4 sharpens rather than changes. The build must
+guarantee the kernels are inlined, and at present it neither guarantees nor
+checks it. Counting the out-of-line lambda symbols in the linked executable is
+a cheap and exact check, and it belongs in the build or in CI: it is a single
+`nm -C | grep -c`, it needs no timing run, and it would have caught all three
+of the slow configurations above.
+
+These runs also said something about parity. As measured, answers were correct
+everywhere -- all six builds agreed with the gcc reference to twelve
+significant digits in energy -- but bit-for-bit held only under gcc, because
+the §2 work matched g++ to gfortran expression by expression and MOM6's own
+answer moves between compilers. Under nvhpc the `std::fma` calls that matching
+required became calls into libm (`__fma_fma3`, about 1% of the run), since
+`-Mnofma` forbids the instruction the intrinsic exists to emit: scaffolding
+costing time on a toolchain the parity did not hold on anyway. Both of those
+are what prompted turning contraction off on both sides instead (§2), after
+which bit-for-bit holds under all three.
+
+### Taking the inlining decision away from the compiler
+
+The cliff has a fix that costs nothing and does not depend on the optimization
+level: put `always_inline` on the kernel lambdas. `MOM_kernel_inline.h` defines
+`MOM_KERNEL_INLINE` for that, and all 64 `ParallelFor` sites carry it.
+
+| gcc build | out-of-line kernels | main loop |
+|---|---:|---:|
+| `-O2` before | 19 | 5.24 s |
+| `-O2` after | **0** | **3.26 s** |
+| `-O3` (either) | 0 | 2.63 s |
+
+Against MOM6 `-O2`, gcc `-O2` goes from 0.87x to **1.44x**, and the `--param`
+options above are no longer needed to get there. gcc honours the attribute;
+icpx needed nothing to begin with; nvc++ accepts and ignores it, which is
+consistent with AMReX defining `AMREX_FORCE_INLINE` as plain `inline` there.
+
+It is a project macro rather than `AMREX_FORCE_INLINE` because that macro
+expands to `inline __attribute__((always_inline))`, and `inline` is not part of
+a lambda-declarator -- gcc rejects it with "'inline' invalid in lambda". AMReX
+has no attribute-only spelling. Its one attribute-only inlining macro,
+`AMREX_FLATTEN`, does compile, and on the eighteen enclosing routines it gets
+the count to zero and gcc `-O2` to 3.05 s. It is still the wrong tool: it
+inlines everything those routines call, not just the kernels, and under icpx
+that means 69.5 G instructions against 22.8 G and a run time of 6.41 s against
+2.72 s. A blunt inlining hammer is worse than the heuristic; the narrow
+attribute on the lambda is what fits.
+
+Restructuring the kernels the way `TIM/mom/cpp` does -- one `ParallelFor` per
+free function, the per-point arithmetic in force-inlined helpers -- was tried
+first and is *not* what fixes it. Extracting the eight kernels of
+`HorizontalViscosity::calculate` that way moved the count from 12 to 11 under
+gcc `-O2` and not at all under nvc++. What decides it is the size of the kernel
+body against the inliner's limit: `--param max-inline-insns-single=1000` alone
+takes that file from 12 to 0, TIM's largest kernel bodies compile to 564--660
+bytes and are inlined, and the protoMOMxx kernels that are not are 684--985.
+TIM lands on the right side of the limit because each of its kernels does one
+thing, which is a granularity choice with its own cost in passes over memory.
+Forcing the inline gets the same result without paying it.
+
 ### Caveats that have not changed
 
 - MOM6's diagnostics cost only 2.7% here (measured with an empty
@@ -402,7 +553,7 @@ it is worth knowing which half is which:
 | change | cost |
 |---|---:|
 | velocity truncation (`vertvisc_limit_vel`) | +4.0% |
-| contraction disabled in three kernels | +2.0% |
+| contraction disabled (three kernels then, build-wide now) | +2.0% |
 | the `src/types` layering | 0.0% |
 | the three closing fixes (two `fma`s, one barrier, one parenthesis) | 0.0% |
 
@@ -633,6 +784,17 @@ and enumerating the placements finds the pattern that reproduces MOM6 on every
 point, in seconds. That technique should be part of the parity harness, not a
 one-off.
 
+**But the better answer to a hard matching problem can be to remove the need
+for it.** All of that work matches a Fortran build that fuses. Turning
+contraction off on *both* sides instead makes every one of those expressions
+agree by construction, deletes the five `std::fma` calls and the barrier, and
+extends the bit-for-bit result from one compiler to three, for 2--3% on each
+side. It was not obvious at the time because the reference build was treated
+as fixed; two of MOM6's three mkmf templates already disabled contraction, so
+the flag was the odd one out rather than the norm. The lesson is to check
+whether the constraint is really a constraint before building machinery
+against it.
+
 **A search only finds what is in its hypothesis space, and the pointwise dump
 finds the rest.** The last difference in this exercise survived every
 contraction search for a simple reason: it was not a contraction. Fortran's
@@ -678,9 +840,8 @@ against.
 - **GPU.** Not attempted.
 - **Restart exactness and rotational symmetry**, two of the four §5
   invariants; neither has an implementation to test.
-- **The bit-for-bit result on another machine or compiler.** The contraction
-  matching of §2 is specific to this pair of builds. A different `-march`, a
-  different GCC, or a non-GNU compiler will move the fusion decisions again.
-  Whether MOM6 parity should be claimed per build pair, or whether both models
-  should be built with contraction off for the comparison, is a decision the
-  project has not made and should.
+- **The bit-for-bit result on another machine.** This is now much less open
+  than it was: with contraction disabled on both sides (§2) parity holds under
+  gcc, intel and nvhpc on this machine, so it is no longer a property of one
+  compiler pair. It has still only been checked on derecho, and a different
+  `-march` or a different libm could still move it.
