@@ -3,7 +3,6 @@
 #include "MOM_vert_friction.h"
 
 #include "MOM_fields.h"
-#include "MOM_fp_contract.h"
 #include "MOM_kernel_inline.h"
 #include "MOM_logger.h"
 #include "MOM_loop_boxes.h"
@@ -295,7 +294,7 @@ void VertFriction::apply(amrex::MultiFab &u, amrex::MultiFab &v, const amrex::Mu
           const amrex::Real h_a = 0.5 * (hh(i - 1, j, k) + hh(i, j, k)) + H_NEGLECT;
           amrex::Real hfr = 1.0;
           if ((zDS + h_a) > Hmix) hfr = (Hmix - zDS) / h_a;
-          uu(i, j, k) = uu(i, j, k) + fp_rounded(I_Hmix * hfr * stress);
+          uu(i, j, k) = uu(i, j, k) + (I_Hmix * hfr * stress);
           zDS += h_a;
           if (zDS >= Hmix) break;
         }
@@ -335,7 +334,7 @@ void VertFriction::apply(amrex::MultiFab &u, amrex::MultiFab &v, const amrex::Mu
           const amrex::Real h_a = 0.5 * (hh(i, j - 1, k) + hh(i, j, k)) + H_NEGLECT;
           amrex::Real hfr = 1.0;
           if ((zDS + h_a) > Hmix) hfr = (Hmix - zDS) / h_a;
-          vv(i, j, k) = vv(i, j, k) + fp_rounded(I_Hmix * hfr * stress);
+          vv(i, j, k) = vv(i, j, k) + (I_Hmix * hfr * stress);
           zDS += h_a;
           if (zDS >= Hmix) break;
         }

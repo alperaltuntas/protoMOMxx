@@ -22,12 +22,3 @@ target_link_libraries(MOM_src_parameterizations
     MOM_src_types
 )
 add_amrex_to_protomom_target(MOM_src_parameterizations)
-
-# Floating-point contraction has to match the Fortran side expression by
-# expression, not file by file (see the PROTOMOM_NO_FP_CONTRACT comment in the
-# top-level CMakeLists). gfortran contracts nothing in MOM6's horizontal
-# viscosity, because it writes its intermediates -- the strain rates, the
-# stresses -- into arrays before using them, which blocks fusion. The one
-# expression it does contract is written out as std::fma in the source.
-set_source_files_properties(lateral/MOM_hor_visc.cpp
-  PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")

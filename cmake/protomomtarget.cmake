@@ -11,15 +11,19 @@ function(add_amrex_to_protomom_target PROTOMOM_TARGET)
   target_link_libraries(${PROTOMOM_TARGET} PUBLIC AMReX::amrex)
 
   # The build half of the bit-for-bit parity contract (DESIGN.md section 5):
-  # floating-point contraction must match the Fortran side of the comparison.
-  # GCC and Clang contract a*b+c into an FMA at -O by default, and so does
-  # gfortran, so the default here is to leave contraction on. Turning it off
-  # in C++ alone changes answers away from a stock MOM6 build. Where the two
-  # compilers disagree about a particular expression, the fix is local rather
-  # than build-wide; see MOM_fp_contract.h.
-  if(PROTOMOM_NO_FP_CONTRACT)
-    target_compile_options(${PROTOMOM_TARGET} PRIVATE
-      $<$<CXX_COMPILER_ID:GNU,Clang>:-ffp-contract=off>
-      $<$<CXX_COMPILER_ID:IntelLLVM,Intel>:-fp-model=precise>)
-  endif()
+  # floating-point contraction has to match the Fortran side of the
+  # comparison, because contraction happens inside a single expression and so
+  # decides where each model rounds. Both sides disable it. That is already
+  # what MOM6's intel and nvhpc mkmf templates do (-no-fma, -Mnofma); the gnu
+  # template needs -ffp-contract=off adding to match them.
+  #
+  # Disabling it is not a numerical preference and not optional: with
+  # contraction on, the C++ compiler fuses expressions the Fortran compiler
+  # leaves alone and the answers separate in the last bit. Matching it here
+  # rather than expression by expression is what makes the parity hold under
+  # all three compilers instead of only under gcc.
+  target_compile_options(${PROTOMOM_TARGET} PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-ffp-contract=off>
+    $<$<CXX_COMPILER_ID:IntelLLVM,Intel>:-fp-model=precise;-ffp-contract=off>
+    $<$<CXX_COMPILER_ID:NVHPC>:-Kieee;-Mnofma>)
 endfunction()

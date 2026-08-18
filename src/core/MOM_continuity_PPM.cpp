@@ -23,15 +23,12 @@ void ppm_limit_pos(amrex::Real &h_L, amrex::Real &h_R, const amrex::Real h_in,
         h_L = h_in;
         h_R = h_in;
       } else {
-        // This file is compiled without floating-point contraction, because
-        // gfortran leaves MOM6's continuity solver unfused everywhere except
-        // these two expressions, which are written out as fused
-        // multiply-adds.
-        const amrex::Real bound = std::fma(curv, curv, 3.0 * (dh * dh));
+        // 3.0*dh**2 in the Fortran is 3*(dh*dh): ** binds tighter than *.
+        const amrex::Real bound = (curv * curv) + (3.0 * (dh * dh));
         if (12.0 * curv * (h_in - h_min) < bound) {
           const amrex::Real scale = 12.0 * curv * (h_in - h_min) / bound;
-          h_L = std::fma(scale, h_L - h_in, h_in);
-          h_R = std::fma(scale, h_R - h_in, h_in);
+          h_L = h_in + scale * (h_L - h_in);
+          h_R = h_in + scale * (h_R - h_in);
         }
       }
     }
@@ -211,8 +208,8 @@ void ContinuityPPM::solve(amrex::MultiFab &h, amrex::MultiFab &uh, amrex::MultiF
     cell_bx.setSmall(2, 0);
     cell_bx.setBig(2, nk - 1);
     amrex::ParallelFor(cell_bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
-      hh(i, j, k) = amrex::max(std::fma(-(dt * IareaT(i, j, 0)),
-                                       uuh(i + 1, j, k) - uuh(i, j, k), hi(i, j, k)),
+      hh(i, j, k) = amrex::max(hi(i, j, k) - (dt * IareaT(i, j, 0)) *
+                                                   (uuh(i + 1, j, k) - uuh(i, j, k)),
                                h_min);
     });
   }
@@ -267,8 +264,8 @@ void ContinuityPPM::solve(amrex::MultiFab &h, amrex::MultiFab &uh, amrex::MultiF
     cell_bx.setSmall(2, 0);
     cell_bx.setBig(2, nk - 1);
     amrex::ParallelFor(cell_bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
-      hh(i, j, k) = amrex::max(std::fma(-(dt * IareaT(i, j, 0)),
-                                       vvh(i, j + 1, k) - vvh(i, j, k), hh(i, j, k)),
+      hh(i, j, k) = amrex::max(hh(i, j, k) - (dt * IareaT(i, j, 0)) *
+                                                   (vvh(i, j + 1, k) - vvh(i, j, k)),
                                h_min);
     });
   }

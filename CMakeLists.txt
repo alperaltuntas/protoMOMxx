@@ -7,15 +7,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(PROTOMOM_CUDA "Build with Cuda backend" OFF)
 option(PROTOMOM_ADD_TEST_TARGETS "Build test targets" OFF)
 option(PROTOMOM_FETCH_DEPS "Fetch missing dependencies automatically" ON)
-# Floating-point contraction has to MATCH the Fortran side of a parity run,
-# not simply be disabled, and the match is per expression rather than per
-# build: contraction only ever happens inside one expression, so what has to
-# agree is where each model rounds. The reference MOM6 build here contracts, so
-# the default is to leave contraction on and to force rounding at the few
-# places where gfortran does not fuse and g++ does (see MOM_fp_contract.h and
-# the note in src/core/CMakeLists.txt). Set this ON when the Fortran side is
-# built with contraction disabled throughout.
-option(PROTOMOM_NO_FP_CONTRACT "Disable FMA contraction. Set to match the Fortran side of a bit-for-bit parity run." OFF)
 
 if(PROTOMOM_CUDA)
   enable_language(CUDA)

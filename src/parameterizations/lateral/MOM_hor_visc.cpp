@@ -412,15 +412,11 @@ void HorizontalViscosity::calculate(amrex::MultiFab &diffu, amrex::MultiFab &dif
       const amrex::Array4<const amrex::Real> IareaCu = grid.IareaCu().const_array(mfi);
       amrex::ParallelFor(loops::flat(loops::u_points(valid)),
                          [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
-        // This file is compiled without floating-point contraction, because
-        // gfortran leaves MOM6's horizontal viscosity unfused everywhere its
-        // intermediates pass through an array. The one place it does contract
-        // is the outer sum here, so that fused multiply-add is written out.
         const amrex::Real d_xy = (dx2q(i, j, 0) * sxy(i, j, 0)) -
                                  (dx2q(i, j + 1, 0) * sxy(i, j + 1, 0));
         const amrex::Real d_xx = (dy2h(i - 1, j, 0) * sxx(i - 1, j, 0)) -
                                  (dy2h(i, j, 0) * sxx(i, j, 0));
-        du(i, j, k) = (std::fma(IdxCu(i, j, 0), d_xy, IdyCu(i, j, 0) * d_xx) *
+        du(i, j, k) = (((IdxCu(i, j, 0) * d_xy) + (IdyCu(i, j, 0) * d_xx)) *
                        IareaCu(i, j, 0)) / (hu(i, j, 0) + H_NEGLECT);
       });
 
@@ -434,7 +430,7 @@ void HorizontalViscosity::calculate(amrex::MultiFab &diffu, amrex::MultiFab &dif
                                  (dy2q(i + 1, j, 0) * sxy(i + 1, j, 0));
         const amrex::Real d_xx = (dx2h(i, j - 1, 0) * sxx(i, j - 1, 0)) -
                                  (dx2h(i, j, 0) * sxx(i, j, 0));
-        dv(i, j, k) = (std::fma(IdyCv(i, j, 0), d_xy, -(IdxCv(i, j, 0) * d_xx)) *
+        dv(i, j, k) = (((IdyCv(i, j, 0) * d_xy) - (IdxCv(i, j, 0) * d_xx)) *
                        IareaCv(i, j, 0)) / (hv(i, j, 0) + H_NEGLECT);
       });
     }
