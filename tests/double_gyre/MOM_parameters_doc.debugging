@@ -1,3 +1,7 @@
 ! This file was written by the model and records the debugging parameters used at run-time.
 DEBUG = False                   !   [nondim] default = False
                                 ! If true, write out verbose debugging data.
+NBOXES = 0                      ! default = 0
+                                ! The number of boxes to decompose the domain into. The default of 0 gives one
+                                ! box per processor. Any other value is a debugging aid: the answers must not
+                                ! depend on it.

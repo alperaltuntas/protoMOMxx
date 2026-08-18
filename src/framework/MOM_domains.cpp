@@ -1,3 +1,4 @@
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -67,6 +68,22 @@ Domain make_domain(RuntimeParams &params) {
     logger::fatal("make_domain: NIHALO and NJHALO must be non-negative.");
   }
 
+  // A protoMOMxx-only knob with no MOM6 counterpart: MOM6 fixes the
+  // decomposition to one tile per PE and varies it through LAYOUT and the PE
+  // count. Splitting a rank's share into several boxes is how the layout
+  // independence of DESIGN.md section 5 gets exercised without MPI, which is
+  // the only way to test halo handling in a serial build.
+  int n_boxes = 0;
+  params.get("NBOXES", n_boxes,
+             {.default_value = 0,
+              .desc = "The number of boxes to decompose the domain into. The default of 0 "
+                      "gives one box per processor. Any other value is a debugging aid: the "
+                      "answers must not depend on it.",
+              .debugging_param = true});
+  if (n_boxes < 0) {
+    logger::fatal("make_domain: NBOXES must not be negative.");
+  }
+
   unsupported_param(params, "GLOBAL_INDEXING", true,
                     "protoMOMxx always uses global index conventions; local "
                     "indexing is not supported.");
@@ -89,7 +106,8 @@ Domain make_domain(RuntimeParams &params) {
                  .nj_halo = nj_halo,
                  .reentrant_x = reentrant_x,
                  .reentrant_y = reentrant_y,
-                 .tripolar_n = tripolar_n});
+                 .tripolar_n = tripolar_n,
+                 .n_boxes = (n_boxes > 0) ? std::optional<int>(n_boxes) : std::nullopt});
 }
 
 } // namespace MOM
