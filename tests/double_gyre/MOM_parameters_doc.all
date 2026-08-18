@@ -7,6 +7,15 @@ VERBOSITY = 2                   ! default = 2
                                 !   0 = Only FATAL messages
                                 !   2 = Only FATAL, WARNING, NOTE [default]
                                 !   9 = All
+DT = 1200.0                     !   [s]
+                                ! The (baroclinic) dynamics time step.  The time-step that is actually used will
+                                ! be an integer fraction of the forcing time-step (DT_FORCING in ocean-only mode
+                                ! or the coupling timestep in coupled mode.)
+DT_THERM = 2400.0               !   [s] default = 1200.0
+                                ! The thermodynamic and tracer advection time step. Ideally DT_THERM should be
+                                ! an integer multiple of DT and less than the forcing or coupling time-step,
+                                ! unless THERMO_SPANS_COUPLING is true, in which case DT_THERM can be an integer
+                                ! multiple of the coupling timestep.  By default DT_THERM is set to DT.
 SPLIT = True                    ! default = True
                                 ! Use the split time stepping if true.
 SPLIT_RK4 = False               ! default = False
@@ -144,3 +153,14 @@ VELOCITY_CONFIG = "zero"        ! default = "zero"
                                 !    uniform - the flow is uniform (determined by
                                 !      parameters INITIAL_U_CONST and INITIAL_V_CONST).
                                 !    USER - call a user modified routine.
+
+! === module MOM_main (MOM_driver) ===
+DT_FORCING = 2400.0             !   [s] default = 1200.0
+                                ! The time step for changing forcing, coupling with other components, or
+                                ! potentially writing certain diagnostics. The default value is given by DT.
+TIMEUNIT = 8.64e+04             !   [s] default = 8.64e+04
+                                ! The time unit for DAYMAX, ENERGYSAVEDAYS, and RESTINT.
+DAYMAX = 10.0                   !   [days]
+                                ! The final time of the whole simulation, in units of TIMEUNIT seconds.  This
+                                ! also sets the potential end time of the present run segment if the end time is
+                                ! not set via ocean_solo_nml in input.nml.

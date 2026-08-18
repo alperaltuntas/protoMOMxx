@@ -44,6 +44,22 @@ Model::Config Model::read_config_switches(RuntimeParams &params) {
 
   Config config;
 
+  params.get("DT", config.dt,
+             {.desc = "The (baroclinic) dynamics time step.  The time-step that is actually "
+                      "used will be an integer fraction of the forcing time-step (DT_FORCING "
+                      "in ocean-only mode or the coupling timestep in coupled mode.)",
+              .units = "s",
+              .fail_if_missing = true});
+
+  params.get("DT_THERM", config.dt_therm,
+             {.default_value = config.dt,
+              .desc = "The thermodynamic and tracer advection time step. Ideally DT_THERM "
+                      "should be an integer multiple of DT and less than the forcing or "
+                      "coupling time-step, unless THERMO_SPANS_COUPLING is true, in which "
+                      "case DT_THERM can be an integer multiple of the coupling timestep.  "
+                      "By default DT_THERM is set to DT.",
+              .units = "s"});
+
   params.get("SPLIT", config.split, {.default_value = true, .desc = "Use the split time stepping if true."});
 
   params.get("SPLIT_RK4", config.split_rk4,
@@ -75,6 +91,20 @@ Model::Config Model::read_config_switches(RuntimeParams &params) {
               .debugging_param = true});
 
   return config;
+}
+
+void Model::step(const amrex::Real dt_forcing, const int n_steps) {
+
+  const amrex::Real dt_dyn = dt_forcing / static_cast<amrex::Real>(n_steps);
+
+  for (int n = 0; n < n_steps; ++n) {
+    // todo: the dynamics. MOM6's step_MOM dispatches here on the four-way
+    //       split / split_RK4 / RK2 / RK3 branch.
+    (void)dt_dyn;
+    // defer: the thermodynamic and tracer half of step_MOM (ADIABATIC is true
+    //        and there are no tracers in the driving testcase), the diagnostic
+    //        calls, and the surface-state extraction.
+  }
 }
 
 void Model::initialize_dynamics(RuntimeParams &params) {

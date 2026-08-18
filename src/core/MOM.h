@@ -26,6 +26,8 @@ public:
   /// @brief Scalar configuration switches of the model (the analogue of the
   /// scalar members of MOM6's MOM_control_struct).
   struct Config {
+    amrex::Real dt = 0.0;         ///< The baroclinic dynamics timestep [T ~> s].
+    amrex::Real dt_therm = 0.0;   ///< The thermodynamic and tracer timestep [T ~> s].
     bool split = true;            ///< Use split time stepping.
     bool split_rk4 = false;       ///< Use the RK4 variant of the split scheme.
     bool use_RK2 = false;         ///< Use RK2 (not RK3) in unsplit stepping.
@@ -57,6 +59,13 @@ public:
   /// @brief Read-only access to the prognostic state.
   /// @return Const reference to the model's prognostic state.
   const State &state() const { return state_; }
+
+  /// @brief Advance the model over one forcing interval. The analogue of
+  /// MOM6's step_MOM: it runs the requested number of dynamics steps and
+  /// dispatches on the configured time stepping scheme.
+  /// @param dt_forcing The length of the forcing interval [T ~> s].
+  /// @param n_steps The number of dynamics steps in the interval.
+  void step(amrex::Real dt_forcing, int n_steps);
 
 private:
   // config_ initialization must precede domain_: its initializer sets the log 

@@ -8,6 +8,7 @@
 #include <iostream>
 
 #include "MOM.h"
+#include "MOM_clock.h"
 #include "MOM_directories.h"
 #include "MOM_infra.h"
 #include "MOM_logger.h"
@@ -35,20 +36,31 @@ int main(int argc, char* argv[]) {
     // RuntimeParams reads the parameter files specified in input.nml.
     MOM::RuntimeParams params(directories.parameter_filenames(), "MOM_parameters_doc");
 
-    // todo: set_calendar_type(), time manager (Clock).
+    // defer: set_calendar_type(); the run starts at time zero and carries no
+    //        date, so nothing needs a calendar yet.
     // defer: time_interp_external_init()
 
     // Initialize the core MOM object (the analogue of MOM6's initialize_MOM).
-    const MOM::Model model(params);
+    MOM::Model model(params);
+
+    // The run's time axis. Constructed after the Model, as in MOM6's solo
+    // driver, which reads DT_FORCING and DAYMAX after initialize_MOM.
+    MOM::Clock clock(params);
 
     // todo: extract_surface_state()
     // todo: surface_forcing_init()
     // defer: MOM_wave_interface_init(), data_override_init(), ice shelf hooks
-    // todo: read run-control params (DT, DT_FORCING, DAYMAX, ...) and run the
-    //       time loop:
-    //         while (clock.time() < clock.end()) {
-    //           set_forcing(...); model.step(...); clock.advance();
-    //         }
+
+    MOM::logger::note("Starting the time loop: ", clock.end_time() / 86400.0,
+                      " days, ", clock.steps_per_forcing(),
+                      " dynamics steps per forcing interval.");
+
+    while (!clock.done()) {
+      // todo: set_forcing(forces, clock.time())
+      model.step(clock.dt_forcing(), clock.steps_per_forcing());
+      clock.advance();
+    }
+
     // todo: finish_MOM_initialization() on the first iteration
     // defer: mech_forcing_diags(), forcing_diagnostics()
     // defer: save_MOM_restart(), write_ocean_solo_res(), diag_mediator_end()
