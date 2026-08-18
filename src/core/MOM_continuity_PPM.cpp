@@ -2,6 +2,7 @@
 
 #include "MOM_continuity_PPM.h"
 
+#include "MOM_kernel_inline.h"
 #include "MOM_logger.h"
 #include "MOM_loop_boxes.h"
 
@@ -169,12 +170,12 @@ void ContinuityPPM::solve(amrex::MultiFab &h, amrex::MultiFab &uh, amrex::MultiF
     // PPM_reconstruction_x: slopes over isl-1..iel+1, edges over isl..iel,
     // where isl = ish-1 and iel = ieh+1.
     amrex::ParallelFor(amrex::grow(lb, amrex::IntVect(2, 0, 0)),
-                       [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+                       [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       sl(i, j, k) = ppm_slope(hi(i - 1, j, k), hi(i, j, k), hi(i + 1, j, k),
                               maskT(i - 1, j, 0), maskT(i, j, 0), maskT(i + 1, j, 0));
     });
     amrex::ParallelFor(amrex::grow(lb, amrex::IntVect(1, 0, 0)),
-                       [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+                       [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       // A land neighbour contributes the local thickness instead of its own.
       const amrex::Real h_im1 = maskT(i - 1, j, 0) * hi(i - 1, j, k) +
                                 (1.0 - maskT(i - 1, j, 0)) * hi(i, j, k);
@@ -196,7 +197,7 @@ void ContinuityPPM::solve(amrex::MultiFab &h, amrex::MultiFab &uh, amrex::MultiF
     amrex::Box u_bx = loops::u_points(lb);
     u_bx.setSmall(2, 0);
     u_bx.setBig(2, nk - 1);
-    amrex::ParallelFor(u_bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(u_bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       uuh(i, j, k) = flux_elem(uu(i, j, k), hi(i - 1, j, k), hi(i, j, k),
                                hL(i - 1, j, k), hL(i, j, k), hR(i - 1, j, k), hR(i, j, k),
                                dy_Cu(i, j, 0), IdxT(i - 1, j, 0), IdxT(i, j, 0), dt);
@@ -209,7 +210,7 @@ void ContinuityPPM::solve(amrex::MultiFab &h, amrex::MultiFab &uh, amrex::MultiF
     amrex::Box cell_bx = lb;
     cell_bx.setSmall(2, 0);
     cell_bx.setBig(2, nk - 1);
-    amrex::ParallelFor(cell_bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(cell_bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       hh(i, j, k) = amrex::max(std::fma(-(dt * IareaT(i, j, 0)),
                                        uuh(i + 1, j, k) - uuh(i, j, k), hi(i, j, k)),
                                h_min);
@@ -228,12 +229,12 @@ void ContinuityPPM::solve(amrex::MultiFab &h, amrex::MultiFab &uh, amrex::MultiF
     const amrex::Array4<amrex::Real> sl = slp.array(mfi);
 
     amrex::ParallelFor(amrex::grow(lb, amrex::IntVect(0, 2, 0)),
-                       [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+                       [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       sl(i, j, k) = ppm_slope(hh_in(i, j - 1, k), hh_in(i, j, k), hh_in(i, j + 1, k),
                               maskT(i, j - 1, 0), maskT(i, j, 0), maskT(i, j + 1, 0));
     });
     amrex::ParallelFor(amrex::grow(lb, amrex::IntVect(0, 1, 0)),
-                       [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+                       [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       const amrex::Real h_jm1 = maskT(i, j - 1, 0) * hh_in(i, j - 1, k) +
                                 (1.0 - maskT(i, j - 1, 0)) * hh_in(i, j, k);
       const amrex::Real h_jp1 = maskT(i, j + 1, 0) * hh_in(i, j + 1, k) +
@@ -253,7 +254,7 @@ void ContinuityPPM::solve(amrex::MultiFab &h, amrex::MultiFab &uh, amrex::MultiF
     amrex::Box v_bx = loops::v_points(lb);
     v_bx.setSmall(2, 0);
     v_bx.setBig(2, nk - 1);
-    amrex::ParallelFor(v_bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(v_bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       vvh(i, j, k) = flux_elem(vv(i, j, k), hh_in(i, j - 1, k), hh_in(i, j, k),
                                hL(i, j - 1, k), hL(i, j, k), hR(i, j - 1, k), hR(i, j, k),
                                dx_Cv(i, j, 0), IdyT(i, j - 1, 0), IdyT(i, j, 0), dt);
@@ -265,7 +266,7 @@ void ContinuityPPM::solve(amrex::MultiFab &h, amrex::MultiFab &uh, amrex::MultiF
     amrex::Box cell_bx = lb;
     cell_bx.setSmall(2, 0);
     cell_bx.setBig(2, nk - 1);
-    amrex::ParallelFor(cell_bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(cell_bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       hh(i, j, k) = amrex::max(std::fma(-(dt * IareaT(i, j, 0)),
                                        vvh(i, j + 1, k) - vvh(i, j, k), hh(i, j, k)),
                                h_min);

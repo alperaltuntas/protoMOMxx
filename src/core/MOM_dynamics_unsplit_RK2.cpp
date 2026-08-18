@@ -2,6 +2,7 @@
 
 #include "MOM_debug_dump.h"
 #include "MOM_fields.h"
+#include "MOM_kernel_inline.h"
 #include "MOM_logger.h"
 #include "MOM_loop_boxes.h"
 
@@ -19,7 +20,7 @@ void average_thickness(amrex::MultiFab &h_av, const amrex::MultiFab &h,
     const amrex::Array4<amrex::Real> a = h_av.array(mfi);
     const amrex::Array4<const amrex::Real> hh = h.const_array(mfi);
     const amrex::Array4<const amrex::Real> hhp = hp.const_array(mfi);
-    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       a(i, j, k) = (hh(i, j, k) + hhp(i, j, k)) * 0.5;
     });
   }
@@ -42,7 +43,7 @@ void accelerate(amrex::MultiFab &out, const amrex::MultiFab &in,
     const amrex::Array4<const amrex::Real> ca = CA.const_array(mfi);
     const amrex::Array4<const amrex::Real> df = diff.const_array(mfi);
     const amrex::Array4<const amrex::Real> m = mask.const_array(mfi);
-    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       o(i, j, k) = m(i, j, 0) * (in_a(i, j, k) + dt_wt *
                                  ((pf(i, j, k) + ca(i, j, k)) + df(i, j, k)));
     });

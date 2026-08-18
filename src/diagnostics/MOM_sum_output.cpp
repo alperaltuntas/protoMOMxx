@@ -11,6 +11,7 @@
 
 #include "MOM_fields.h"
 #include "MOM_fp_contract.h"
+#include "MOM_kernel_inline.h"
 #include "MOM_logger.h"
 #include "MOM_loop_boxes.h"
 
@@ -308,7 +309,7 @@ void SumOutput::write_energy(const State &state, const Domain &domain, const Gri
     const amrex::Array4<const amrex::Real> h = state.h().const_array(mfi);
     const amrex::Array4<const amrex::Real> mask = grid.mask2dT().const_array(mfi);
     const amrex::Array4<const amrex::Real> area = grid.areaT().const_array(mfi);
-    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       const amrex::Real areaTm = mask(i, j, 0) * area(i, j, 0);
       t(i, j, k) = h(i, j, k) * (H_to_RZ * areaTm);
     });
@@ -373,7 +374,7 @@ void SumOutput::write_energy(const State &state, const Domain &domain, const Gri
       const amrex::Array4<const amrex::Real> mask = grid.mask2dT().const_array(mfi);
       const amrex::Array4<const amrex::Real> area = grid.areaT().const_array(mfi);
       const amrex::Array4<const amrex::Real> bathy = grid.bathyT().const_array(mfi);
-      amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int) {
+      amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
         const amrex::Real areaTm = mask(i, j, 0) * area(i, j, 0);
         amrex::Real hbelow = 0.0;
         for (int k = nk - 1; k >= 0; --k) {
@@ -398,7 +399,7 @@ void SumOutput::write_energy(const State &state, const Domain &domain, const Gri
     const amrex::Array4<const amrex::Real> v = state.v().const_array(mfi);
     const amrex::Array4<const amrex::Real> mask = grid.mask2dT().const_array(mfi);
     const amrex::Array4<const amrex::Real> area = grid.areaT().const_array(mfi);
-    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       const amrex::Real areaTm = mask(i, j, 0) * area(i, j, 0);
       // gfortran does not contract MOM6's u(I-1)**2 + u(I)**2, so the squares
       // are held back from the sum here too. The terms go into a fixed-point

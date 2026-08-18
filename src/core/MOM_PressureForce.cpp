@@ -5,6 +5,7 @@
 
 #include "MOM_PressureForce.h"
 
+#include "MOM_kernel_inline.h"
 #include "MOM_logger.h"
 #include "MOM_loop_boxes.h"
 
@@ -67,7 +68,7 @@ void PressureForce::calculate(amrex::MultiFab &PFu, amrex::MultiFab &PFv,
     // Both recursions run in one thread per column: the interface heights
     // build upward from the bottom, and the Montgomery potential downward
     // from the surface. H_to_Z is 1 in Boussinesq mode without unit scaling.
-    amrex::ParallelFor(columns, [=] AMREX_GPU_DEVICE(int i, int j, int) {
+    amrex::ParallelFor(columns, [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
       ee(i, j, nk) = -D(i, j, 0);
       for (int k = nk - 1; k >= 0; --k) {
         ee(i, j, k) = ee(i, j, k + 1) + hh(i, j, k);
@@ -88,7 +89,7 @@ void PressureForce::calculate(amrex::MultiFab &PFu, amrex::MultiFab &PFv,
     amrex::Box u_bx = loops::u_points(valid);
     u_bx.setSmall(2, 0);
     u_bx.setBig(2, nk - 1);
-    amrex::ParallelFor(u_bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(u_bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       pfu(i, j, k) = -(MM(i, j, k) - MM(i - 1, j, k)) * IdxCu(i, j, 0);
     });
 
@@ -97,7 +98,7 @@ void PressureForce::calculate(amrex::MultiFab &PFu, amrex::MultiFab &PFv,
     amrex::Box v_bx = loops::v_points(valid);
     v_bx.setSmall(2, 0);
     v_bx.setBig(2, nk - 1);
-    amrex::ParallelFor(v_bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(v_bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       pfv(i, j, k) = -(MM(i, j, k) - MM(i, j - 1, k)) * IdyCv(i, j, 0);
     });
   }

@@ -4,6 +4,7 @@
 
 #include "MOM_fields.h"
 #include "MOM_fp_contract.h"
+#include "MOM_kernel_inline.h"
 #include "MOM_logger.h"
 #include "MOM_loop_boxes.h"
 
@@ -144,7 +145,7 @@ void VertFriction::coefficients(const amrex::MultiFab &u, const amrex::MultiFab 
     const amrex::Array4<const amrex::Real> bbl_u = visc.bbl_thick_u.const_array(mfi);
     const amrex::Array4<amrex::Real> au = a_u_.array(mfi);
     const amrex::Array4<amrex::Real> hu = h_u_.array(mfi);
-    amrex::ParallelFor(loops::flat(loops::u_points(valid)), [=] AMREX_GPU_DEVICE(int i, int j, int) {
+    amrex::ParallelFor(loops::flat(loops::u_points(valid)), [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
       if (maskCu(i, j, 0) <= 0.0) return;
       const amrex::Real kv_bbl = kv_bbl_u(i, j, 0);
       const amrex::Real bbl_thick = bbl_u(i, j, 0) + H_NEGLECT;
@@ -204,7 +205,7 @@ void VertFriction::coefficients(const amrex::MultiFab &u, const amrex::MultiFab 
     const amrex::Array4<const amrex::Real> bbl_v = visc.bbl_thick_v.const_array(mfi);
     const amrex::Array4<amrex::Real> av = a_v_.array(mfi);
     const amrex::Array4<amrex::Real> hv = h_v_.array(mfi);
-    amrex::ParallelFor(loops::flat(loops::v_points(valid)), [=] AMREX_GPU_DEVICE(int i, int j, int) {
+    amrex::ParallelFor(loops::flat(loops::v_points(valid)), [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
       if (maskCv(i, j, 0) <= 0.0) return;
       const amrex::Real kv_bbl = kv_bbl_v(i, j, 0);
       const amrex::Real bbl_thick = bbl_v(i, j, 0) + H_NEGLECT;
@@ -281,7 +282,7 @@ void VertFriction::apply(amrex::MultiFab &u, amrex::MultiFab &v, const amrex::Mu
     const amrex::Array4<amrex::Real> uu = u.array(mfi);
     const amrex::Array4<const amrex::Real> au = a_u_.const_array(mfi);
     const amrex::Array4<const amrex::Real> hu = h_u_.const_array(mfi);
-    amrex::ParallelFor(loops::flat(loops::u_points(valid)), [=] AMREX_GPU_DEVICE(int i, int j, int) {
+    amrex::ParallelFor(loops::flat(loops::u_points(valid)), [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
       if (maskCu(i, j, 0) <= 0.0) return;
 
       // The wind stress, either spread over the top HMIX_STRESS or applied at
@@ -323,7 +324,7 @@ void VertFriction::apply(amrex::MultiFab &u, amrex::MultiFab &v, const amrex::Mu
     const amrex::Array4<amrex::Real> vv = v.array(mfi);
     const amrex::Array4<const amrex::Real> av = a_v_.const_array(mfi);
     const amrex::Array4<const amrex::Real> hv = h_v_.const_array(mfi);
-    amrex::ParallelFor(loops::flat(loops::v_points(valid)), [=] AMREX_GPU_DEVICE(int i, int j, int) {
+    amrex::ParallelFor(loops::flat(loops::v_points(valid)), [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
       if (maskCv(i, j, 0) <= 0.0) return;
 
       amrex::Real surface_stress = 0.0;

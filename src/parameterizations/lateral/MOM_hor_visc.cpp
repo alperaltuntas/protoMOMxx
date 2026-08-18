@@ -2,6 +2,7 @@
 
 #include "MOM_hor_visc.h"
 
+#include "MOM_kernel_inline.h"
 #include "MOM_logger.h"
 #include "MOM_loop_boxes.h"
 
@@ -153,7 +154,7 @@ HorizontalViscosity::HorizontalViscosity(RuntimeParams &params, const amrex::Rea
     const amrex::Array4<amrex::Real> DX_dyT = DX_dyT_.array(mfi);
     const amrex::Array4<amrex::Real> dx2h = dx2h_.array(mfi);
     const amrex::Array4<amrex::Real> dy2h = dy2h_.array(mfi);
-    amrex::ParallelFor(cells, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(cells, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       dx2h(i, j, k) = dxT(i, j, k) * dxT(i, j, k);
       dy2h(i, j, k) = dyT(i, j, k) * dyT(i, j, k);
       DX_dyT(i, j, k) = dxT(i, j, k) * IdyT(i, j, k);
@@ -168,7 +169,7 @@ HorizontalViscosity::HorizontalViscosity(RuntimeParams &params, const amrex::Rea
     const amrex::Array4<amrex::Real> DX_dyBu = DX_dyBu_.array(mfi);
     const amrex::Array4<amrex::Real> dx2q = dx2q_.array(mfi);
     const amrex::Array4<amrex::Real> dy2q = dy2q_.array(mfi);
-    amrex::ParallelFor(corners, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(corners, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       dx2q(i, j, k) = dxBu(i, j, k) * dxBu(i, j, k);
       dy2q(i, j, k) = dyBu(i, j, k) * dyBu(i, j, k);
       DX_dyBu(i, j, k) = dxBu(i, j, k) * IdyBu(i, j, k);
@@ -182,7 +183,7 @@ HorizontalViscosity::HorizontalViscosity(RuntimeParams &params, const amrex::Rea
     const amrex::Array4<const amrex::Real> dx_Cv = grid.dx_Cv().const_array(mfi);
     const amrex::Array4<const amrex::Real> dxCv = grid.dxCv().const_array(mfi);
     const amrex::Array4<amrex::Real> red_xx = reduction_xx_.array(mfi);
-    amrex::ParallelFor(amrex::grow(valid, amrex::IntVect(1, 1, 0)), [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(amrex::grow(valid, amrex::IntVect(1, 1, 0)), [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       amrex::Real r = 1.0;
       if ((dy_Cu(i + 1, j, k) > 0.0) && (dy_Cu(i + 1, j, k) < dyCu(i + 1, j, k)) &&
           (dy_Cu(i + 1, j, k) < dyCu(i + 1, j, k) * r)) r = dy_Cu(i + 1, j, k) / dyCu(i + 1, j, k);
@@ -195,7 +196,7 @@ HorizontalViscosity::HorizontalViscosity(RuntimeParams &params, const amrex::Rea
       red_xx(i, j, k) = r;
     });
     const amrex::Array4<amrex::Real> red_xy = reduction_xy_.array(mfi);
-    amrex::ParallelFor(loops::q_points(valid), [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(loops::q_points(valid), [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       amrex::Real r = 1.0;
       if ((dy_Cu(i, j - 1, k) > 0.0) && (dy_Cu(i, j - 1, k) < dyCu(i, j - 1, k)) &&
           (dy_Cu(i, j - 1, k) < dyCu(i, j - 1, k) * r)) r = dy_Cu(i, j - 1, k) / dyCu(i, j - 1, k);
@@ -212,7 +213,7 @@ HorizontalViscosity::HorizontalViscosity(RuntimeParams &params, const amrex::Rea
     // mean of the squared grid spacings.
     const amrex::Array4<amrex::Real> Kh_bg_xx = Kh_bg_xx_.array(mfi);
     const amrex::Array4<amrex::Real> Lap2_xx = Laplac2_const_xx_.array(mfi);
-    amrex::ParallelFor(amrex::grow(valid, amrex::IntVect(1, 1, 0)), [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(amrex::grow(valid, amrex::IntVect(1, 1, 0)), [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       const amrex::Real grid_sp_h2 = (2.0 * dx2h(i, j, k) * dy2h(i, j, k)) /
                                      (dx2h(i, j, k) + dy2h(i, j, k));
       if (smag) Lap2_xx(i, j, k) = Smag_Lap_const * grid_sp_h2;
@@ -220,7 +221,7 @@ HorizontalViscosity::HorizontalViscosity(RuntimeParams &params, const amrex::Rea
     });
     const amrex::Array4<amrex::Real> Kh_bg_xy = Kh_bg_xy_.array(mfi);
     const amrex::Array4<amrex::Real> Lap2_xy = Laplac2_const_xy_.array(mfi);
-    amrex::ParallelFor(loops::q_points(valid), [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(loops::q_points(valid), [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       const amrex::Real grid_sp_q2 = (2.0 * dx2q(i, j, k) * dy2q(i, j, k)) /
                                      (dx2q(i, j, k) + dy2q(i, j, k));
       if (smag) Lap2_xy(i, j, k) = Smag_Lap_const * grid_sp_q2;
@@ -235,7 +236,7 @@ HorizontalViscosity::HorizontalViscosity(RuntimeParams &params, const amrex::Rea
       const amrex::Array4<const amrex::Real> IareaCu = grid.IareaCu().const_array(mfi);
       const amrex::Array4<const amrex::Real> IareaCv = grid.IareaCv().const_array(mfi);
       const amrex::Array4<amrex::Real> KhMax_xx = Kh_Max_xx_.array(mfi);
-      amrex::ParallelFor(amrex::grow(valid, amrex::IntVect(1, 1, 0)), [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+      amrex::ParallelFor(amrex::grow(valid, amrex::IntVect(1, 1, 0)), [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
         const amrex::Real denom = amrex::max(
             (dy2h(i, j, k) * DY_dxT(i, j, k) * (IdyCu(i + 1, j, k) + IdyCu(i, j, k)) *
              amrex::max(IdyCu(i + 1, j, k) * IareaCu(i + 1, j, k),
@@ -246,7 +247,7 @@ HorizontalViscosity::HorizontalViscosity(RuntimeParams &params, const amrex::Rea
         KhMax_xx(i, j, k) = (denom > 0.0) ? (bound_coef * 0.25 * Idt / denom) : 0.0;
       });
       const amrex::Array4<amrex::Real> KhMax_xy = Kh_Max_xy_.array(mfi);
-      amrex::ParallelFor(loops::q_points(valid), [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+      amrex::ParallelFor(loops::q_points(valid), [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
         const amrex::Real denom = amrex::max(
             (dx2q(i, j, k) * DX_dyBu(i, j, k) * (IdxCu(i, j, k) + IdxCu(i, j - 1, k)) *
              amrex::max(IdxCu(i, j - 1, k) * IareaCu(i, j - 1, k),
@@ -310,7 +311,7 @@ void HorizontalViscosity::calculate(amrex::MultiFab &diffu, amrex::MultiFab &dif
       // The horizontal tension at h points.
       const amrex::Array4<amrex::Real> shxx = sh_xx.array(mfi);
       amrex::ParallelFor(loops::flat(loops::h_points_grown(valid, 2)),
-                         [=] AMREX_GPU_DEVICE(int i, int j, int) {
+                         [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
         const amrex::Real dudx = DY_dxT(i, j, 0) * ((IdyCu(i + 1, j, 0) * uu(i + 1, j, k)) -
                                                     (IdyCu(i, j, 0) * uu(i, j, k)));
         const amrex::Real dvdy = DX_dyT(i, j, 0) * ((IdxCv(i, j + 1, 0) * vv(i, j + 1, k)) -
@@ -321,7 +322,7 @@ void HorizontalViscosity::calculate(amrex::MultiFab &diffu, amrex::MultiFab &dif
       // The shearing strain at q points, with the free-slip mask.
       const amrex::Array4<amrex::Real> shxy = sh_xy.array(mfi);
       amrex::ParallelFor(loops::flat(loops::q_points(valid, 2)),
-                         [=] AMREX_GPU_DEVICE(int i, int j, int) {
+                         [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
         const amrex::Real dvdx = DY_dxBu(i, j, 0) * ((vv(i, j, k) * IdyCv(i, j, 0)) -
                                                      (vv(i - 1, j, k) * IdyCv(i - 1, j, 0)));
         const amrex::Real dudy = DX_dyBu(i, j, 0) * ((uu(i, j, k) * IdxCu(i, j, 0)) -
@@ -334,12 +335,12 @@ void HorizontalViscosity::calculate(amrex::MultiFab &diffu, amrex::MultiFab &dif
       const amrex::Array4<amrex::Real> hu = h_u.array(mfi);
       const amrex::Array4<amrex::Real> hv = h_v.array(mfi);
       amrex::ParallelFor(loops::flat(loops::u_points(valid, 2)),
-                         [=] AMREX_GPU_DEVICE(int i, int j, int) {
+                         [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
         hu(i, j, 0) = 0.5 * (maskT(i - 1, j, 0) * hh(i - 1, j, k) +
                              maskT(i, j, 0) * hh(i, j, k));
       });
       amrex::ParallelFor(loops::flat(loops::v_points(valid, 2)),
-                         [=] AMREX_GPU_DEVICE(int i, int j, int) {
+                         [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
         hv(i, j, 0) = 0.5 * (maskT(i, j - 1, 0) * hh(i, j - 1, k) +
                              maskT(i, j, 0) * hh(i, j, k));
       });
@@ -351,7 +352,7 @@ void HorizontalViscosity::calculate(amrex::MultiFab &diffu, amrex::MultiFab &dif
       const amrex::Array4<const amrex::Real> KhMax_xx = Kh_Max_xx_.const_array(mfi);
       const amrex::Array4<const amrex::Real> red_xx = reduction_xx_.const_array(mfi);
       amrex::ParallelFor(loops::flat(loops::h_points_grown(valid, 1)),
-                         [=] AMREX_GPU_DEVICE(int i, int j, int) {
+                         [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
         amrex::Real Kh = Kh_bg_xx(i, j, 0);
         if (smag) {
           const amrex::Real sh_xx_sq = shxx(i, j, 0) * shxx(i, j, 0);
@@ -379,7 +380,7 @@ void HorizontalViscosity::calculate(amrex::MultiFab &diffu, amrex::MultiFab &dif
       const amrex::Array4<const amrex::Real> KhMax_xy = Kh_Max_xy_.const_array(mfi);
       const amrex::Array4<const amrex::Real> red_xy = reduction_xy_.const_array(mfi);
       amrex::ParallelFor(loops::flat(loops::q_points(valid)),
-                         [=] AMREX_GPU_DEVICE(int i, int j, int) {
+                         [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
         const amrex::Real h2uq = 4.0 * (hu(i, j - 1, 0) * hu(i, j, 0));
         const amrex::Real h2vq = 4.0 * (hv(i - 1, j, 0) * hv(i, j, 0));
         const amrex::Real hq = (2.0 * (h2uq * h2vq)) /
@@ -410,7 +411,7 @@ void HorizontalViscosity::calculate(amrex::MultiFab &diffu, amrex::MultiFab &dif
       const amrex::Array4<const amrex::Real> dy2h = dy2h_.const_array(mfi);
       const amrex::Array4<const amrex::Real> IareaCu = grid.IareaCu().const_array(mfi);
       amrex::ParallelFor(loops::flat(loops::u_points(valid)),
-                         [=] AMREX_GPU_DEVICE(int i, int j, int) {
+                         [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
         // This file is compiled without floating-point contraction, because
         // gfortran leaves MOM6's horizontal viscosity unfused everywhere its
         // intermediates pass through an array. The one place it does contract
@@ -428,7 +429,7 @@ void HorizontalViscosity::calculate(amrex::MultiFab &diffu, amrex::MultiFab &dif
       const amrex::Array4<const amrex::Real> dx2h = dx2h_.const_array(mfi);
       const amrex::Array4<const amrex::Real> IareaCv = grid.IareaCv().const_array(mfi);
       amrex::ParallelFor(loops::flat(loops::v_points(valid)),
-                         [=] AMREX_GPU_DEVICE(int i, int j, int) {
+                         [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
         const amrex::Real d_xy = (dy2q(i, j, 0) * sxy(i, j, 0)) -
                                  (dy2q(i + 1, j, 0) * sxy(i + 1, j, 0));
         const amrex::Real d_xx = (dx2h(i, j - 1, 0) * sxx(i, j - 1, 0)) -

@@ -2,6 +2,7 @@
 
 #include "MOM_set_viscosity.h"
 
+#include "MOM_kernel_inline.h"
 #include "MOM_logger.h"
 #include "MOM_loop_boxes.h"
 
@@ -151,7 +152,7 @@ void SetViscosity::set_viscous_BBL(VertVisc &visc, const amrex::MultiFab &u,
 
     const amrex::Array4<amrex::Real> kv_u = visc.Kv_bbl_u.array(mfi);
     const amrex::Array4<amrex::Real> th_u = visc.bbl_thick_u.array(mfi);
-    amrex::ParallelFor(loops::flat(loops::u_points(valid)), [=] AMREX_GPU_DEVICE(int i, int j, int) {
+    amrex::ParallelFor(loops::flat(loops::u_points(valid)), [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
       if (maskCu(i, j, 0) <= 0.0) return;
       // Accumulate the thickness of the layers the bottom stress can stir,
       // stopping where the density difference across them balances the stress.
@@ -202,7 +203,7 @@ void SetViscosity::set_viscous_BBL(VertVisc &visc, const amrex::MultiFab &u,
 
     const amrex::Array4<amrex::Real> kv_v = visc.Kv_bbl_v.array(mfi);
     const amrex::Array4<amrex::Real> th_v = visc.bbl_thick_v.array(mfi);
-    amrex::ParallelFor(loops::flat(loops::v_points(valid)), [=] AMREX_GPU_DEVICE(int i, int j, int) {
+    amrex::ParallelFor(loops::flat(loops::v_points(valid)), [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
       if (maskCv(i, j, 0) <= 0.0) return;
       amrex::Real Rhtot = 0.0;
       amrex::Real htot = 0.0;

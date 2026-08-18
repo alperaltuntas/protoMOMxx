@@ -2,6 +2,7 @@
 
 #include "MOM_CoriolisAdv.h"
 
+#include "MOM_kernel_inline.h"
 #include "MOM_logger.h"
 #include "MOM_loop_boxes.h"
 
@@ -123,13 +124,13 @@ void CoriolisAdv::calculate(amrex::MultiFab &CAu, amrex::MultiFab &CAv,
     const amrex::Array4<const amrex::Real> maskT = grid.mask2dT().const_array(mfi);
     const amrex::Array4<const amrex::Real> areaT = grid.areaT().const_array(mfi);
     amrex::ParallelFor(loops::flat(loops::h_points_grown(valid, 3)),
-                       [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+                       [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       area_h(i, j, k) = maskT(i, j, k) * areaT(i, j, k);
     });
 
     const amrex::Array4<amrex::Real> area_q = Area_q.array(mfi);
     amrex::ParallelFor(loops::flat(loops::q_points(valid, 2)),
-                       [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+                       [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       // MOM6's Area_q(I,J) sums the four h cells around the corner; AMReX
       // node (i,j) is MOM6's (I,J) = (i-1,j-1), so the four cells are
       // (i-1,j-1), (i,j), (i,j-1) and (i-1,j).
@@ -163,12 +164,12 @@ void CoriolisAdv::calculate(amrex::MultiFab &CAu, amrex::MultiFab &CAv,
       // The area-weighted thicknesses at the velocity points. MOM6's
       // hArea_u(I,j) is at AMReX u index I+1, between cells I and I+1.
       amrex::ParallelFor(loops::flat(loops::u_points(valid, 2)),
-                         [=] AMREX_GPU_DEVICE(int i, int j, int) {
+                         [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
         hA_u(i, j, 0) = 0.5 * ((area_h(i - 1, j, 0) * hh(i - 1, j, k)) +
                                (area_h(i, j, 0) * hh(i, j, k)));
       });
       amrex::ParallelFor(loops::flat(loops::v_points(valid, 2)),
-                         [=] AMREX_GPU_DEVICE(int i, int j, int) {
+                         [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
         hA_v(i, j, 0) = 0.5 * ((area_h(i, j - 1, 0) * hh(i, j - 1, k)) +
                                (area_h(i, j, 0) * hh(i, j, k)));
       });
@@ -176,7 +177,7 @@ void CoriolisAdv::calculate(amrex::MultiFab &CAu, amrex::MultiFab &CAv,
       // The circulation around a q point, the relative and absolute
       // vorticities, and the potential vorticity q = (f + rv) / h.
       amrex::ParallelFor(loops::flat(loops::q_points(valid, 1)),
-                         [=] AMREX_GPU_DEVICE(int i, int j, int) {
+                         [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
         const amrex::Real dvdx = (vv(i, j, k) * dyCv(i, j, 0)) -
                                  (vv(i - 1, j, k) * dyCv(i - 1, j, 0));
         const amrex::Real dudy = (uu(i, j, k) * dxCu(i, j, 0)) -
@@ -197,7 +198,7 @@ void CoriolisAdv::calculate(amrex::MultiFab &CAu, amrex::MultiFab &CAv,
       const amrex::Array4<const amrex::Real> areaCv = grid.areaCv().const_array(mfi);
       const amrex::Array4<const amrex::Real> IareaT = grid.IareaT().const_array(mfi);
       amrex::ParallelFor(loops::flat(loops::h_points_grown(valid, 1)),
-                         [=] AMREX_GPU_DEVICE(int i, int j, int) {
+                         [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
         ke(i, j, 0) = (((areaCu(i + 1, j, 0) * (uu(i + 1, j, k) * uu(i + 1, j, k))) +
                         (areaCu(i, j, 0) * (uu(i, j, k) * uu(i, j, k)))) +
                        ((areaCv(i, j + 1, 0) * (vv(i, j + 1, k) * vv(i, j + 1, k))) +
@@ -211,7 +212,7 @@ void CoriolisAdv::calculate(amrex::MultiFab &CAu, amrex::MultiFab &CAv,
       const amrex::Array4<const amrex::Real> IdxCu_OBC =
           grid.IdxCu_OBCmask().const_array(mfi);
       amrex::ParallelFor(loops::flat(loops::u_points(valid)),
-                         [=] AMREX_GPU_DEVICE(int i, int j, int) {
+                         [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
         amrex::Real ca = 0.25 *
             ((qq(i, j + 1, 0) * (vvh(i, j + 1, k) + vvh(i - 1, j + 1, k))) +
              (qq(i, j, 0) * (vvh(i - 1, j, k) + vvh(i, j, k)))) * IdxCu(i, j, 0);
@@ -237,7 +238,7 @@ void CoriolisAdv::calculate(amrex::MultiFab &CAu, amrex::MultiFab &CAv,
       const amrex::Array4<const amrex::Real> IdyCv_OBC =
           grid.IdyCv_OBCmask().const_array(mfi);
       amrex::ParallelFor(loops::flat(loops::v_points(valid)),
-                         [=] AMREX_GPU_DEVICE(int i, int j, int) {
+                         [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
         amrex::Real ca = -0.25 *
             ((qq(i, j, 0) * (uuh(i, j - 1, k) + uuh(i, j, k))) +
              (qq(i + 1, j, 0) * (uuh(i + 1, j - 1, k) + uuh(i + 1, j, k)))) * IdyCv(i, j, 0);

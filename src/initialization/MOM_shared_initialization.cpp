@@ -1,5 +1,6 @@
 #include <cmath>
 
+#include "MOM_kernel_inline.h"
 #include "MOM_logger.h"
 #include "MOM_shared_initialization.h"
 
@@ -19,7 +20,7 @@ amrex::MultiFab planetary_rotation(const Domain &domain, const GridSpec &spec,
     const amrex::Box bx = mfi.growntilebox();
     const amrex::Array4<amrex::Real> f = CoriolisBu.array(mfi);
     const amrex::Array4<const amrex::Real> lat = geoLatBu.const_array(mfi);
-    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       f(i, j, k) = (2.0 * omega) * std::sin((PI * lat(i, j, k)) / 180.0);
     });
   }
@@ -54,7 +55,7 @@ amrex::MultiFab named_topography(const Domain &domain, const std::string &config
     for (amrex::MFIter mfi(D); mfi.isValid(); ++mfi) {
       const amrex::Box bx = mfi.tilebox();
       const amrex::Array4<amrex::Real> d = D.array(mfi);
-      amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+      amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
         d(i, j, k) = max_depth;
       });
     }
@@ -69,7 +70,7 @@ amrex::MultiFab named_topography(const Domain &domain, const std::string &config
       const amrex::Array4<amrex::Real> d = D.array(mfi);
       const amrex::Array4<const amrex::Real> lon = geoLonT.const_array(mfi);
       const amrex::Array4<const amrex::Real> lat = geoLatT.const_array(mfi);
-      amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+      amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
         d(i, j, k) = Dedge + D0 *
             (std::sin(PI * (lon(i, j, k) - west_lon) / len_lon) *
              (1.0 - std::exp((lat(i, j, k) - (south_lat + len_lat)) * rad_earth * PI /
@@ -87,7 +88,7 @@ amrex::MultiFab named_topography(const Domain &domain, const std::string &config
   for (amrex::MFIter mfi(D); mfi.isValid(); ++mfi) {
     const amrex::Box bx = mfi.growntilebox();
     const amrex::Array4<amrex::Real> d = D.array(mfi);
-    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       d(i, j, k) = amrex::min(amrex::max(d(i, j, k), 0.5 * min_depth), max_depth);
     });
   }

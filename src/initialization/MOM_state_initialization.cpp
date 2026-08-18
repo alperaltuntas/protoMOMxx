@@ -1,5 +1,6 @@
 #include <string>
 
+#include "MOM_kernel_inline.h"
 #include "MOM_logger.h"
 #include "MOM_state_initialization.h"
 
@@ -36,7 +37,7 @@ void initialize_thickness_uniform(amrex::MultiFab &h, const Domain &domain,
 
     const amrex::Box columns(amrex::IntVect(bx.smallEnd(0), bx.smallEnd(1), 0),
                              amrex::IntVect(bx.bigEnd(0), bx.bigEnd(1), 0));
-    amrex::ParallelFor(columns, [=] AMREX_GPU_DEVICE(int i, int j, int) {
+    amrex::ParallelFor(columns, [=] AMREX_GPU_DEVICE(int i, int j, int) MOM_KERNEL_INLINE {
       // depth_tot = bathyT + Z_ref, with Z_ref at its default of zero.
       amrex::Real eta_below = -D(i, j, 0);
       for (int k = nk - 1; k >= 0; --k) {

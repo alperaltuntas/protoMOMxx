@@ -1,6 +1,7 @@
 #include <cmath>
 
 #include "MOM_grid_initialize.h"
+#include "MOM_kernel_inline.h"
 
 namespace MOM {
 
@@ -72,7 +73,7 @@ GridFields spherical_grid_fields(const Domain &domain, const GridSpec &spec) {
     const amrex::Array4<amrex::Real> dxT = fields.dxT.array(mfi);
     const amrex::Array4<amrex::Real> dyT = fields.dyT.array(mfi);
     const amrex::Array4<amrex::Real> areaT = fields.areaT.array(mfi);
-    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       geoLonT(i, j, k) = west_lon + dLon * (i + 0.5);
       geoLatT(i, j, k) = amrex::min(amrex::max(south_lat + dLat * (j + 0.5),
                                                amrex::Real(-90.0)), amrex::Real(90.0));
@@ -89,7 +90,7 @@ GridFields spherical_grid_fields(const Domain &domain, const GridSpec &spec) {
     const amrex::Array4<amrex::Real> geoLonCu = fields.geoLonCu.array(mfi);
     const amrex::Array4<amrex::Real> dxCu = fields.dxCu.array(mfi);
     const amrex::Array4<amrex::Real> dyCu = fields.dyCu.array(mfi);
-    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       geoLonCu(i, j, k) = west_lon + dLon * i;
       geoLatCu(i, j, k) = amrex::min(amrex::max(south_lat + dLat * (j + 0.5),
                                                 amrex::Real(-90.0)), amrex::Real(90.0));
@@ -105,7 +106,7 @@ GridFields spherical_grid_fields(const Domain &domain, const GridSpec &spec) {
     const amrex::Array4<amrex::Real> geoLonCv = fields.geoLonCv.array(mfi);
     const amrex::Array4<amrex::Real> dxCv = fields.dxCv.array(mfi);
     const amrex::Array4<amrex::Real> dyCv = fields.dyCv.array(mfi);
-    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       geoLonCv(i, j, k) = west_lon + dLon * (i + 0.5);
       geoLatCv(i, j, k) = amrex::min(amrex::max(south_lat + dLat * j,
                                                 amrex::Real(-90.0)), amrex::Real(90.0));
@@ -121,7 +122,7 @@ GridFields spherical_grid_fields(const Domain &domain, const GridSpec &spec) {
     const amrex::Array4<amrex::Real> geoLonBu = fields.geoLonBu.array(mfi);
     const amrex::Array4<amrex::Real> dxBu = fields.dxBu.array(mfi);
     const amrex::Array4<amrex::Real> dyBu = fields.dyBu.array(mfi);
-    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       geoLonBu(i, j, k) = west_lon + dLon * i;
       geoLatBu(i, j, k) = amrex::min(amrex::max(south_lat + dLat * j,
                                                 amrex::Real(-90.0)), amrex::Real(90.0));
@@ -175,7 +176,7 @@ void initialize_masks(const Domain &domain, const TopoSpec &topo_spec,
     const amrex::Array4<amrex::Real> maskBu = fields.mask2dBu.array(mfi);
     const amrex::Array4<const amrex::Real> D = bathyT.const_array(mfi);
 
-    amrex::ParallelFor(cells, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(cells, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       maskT(i, j, k) = (D(i, j, k) <= Dmask) ? 0.0 : 1.0;
     });
 
@@ -184,13 +185,13 @@ void initialize_masks(const Domain &domain, const TopoSpec &topo_spec,
     // Its loop runs I = isd .. ied-1, which is i = isd+1 .. ied here.
     const amrex::Box u_faces =
         amrex::surroundingNodes(cells, 0).growLo(0, -1).growHi(0, -1);
-    amrex::ParallelFor(u_faces, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(u_faces, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       maskCu(i, j, k) = maskT(i - 1, j, k) * maskT(i, j, k);
     });
 
     const amrex::Box v_faces =
         amrex::surroundingNodes(cells, 1).growLo(1, -1).growHi(1, -1);
-    amrex::ParallelFor(v_faces, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(v_faces, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       maskCv(i, j, k) = maskT(i, j - 1, k) * maskT(i, j, k);
     });
 
@@ -198,7 +199,7 @@ void initialize_masks(const Domain &domain, const TopoSpec &topo_spec,
     amrex::Box corners = amrex::surroundingNodes(cells, 0);
     corners = amrex::surroundingNodes(corners, 1);
     corners.growLo(0, -1).growHi(0, -1).growLo(1, -1).growHi(1, -1);
-    amrex::ParallelFor(corners, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(corners, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       maskBu(i, j, k) = (maskCu(i, j - 1, k) * maskCu(i, j, k)) *
                         (maskCv(i - 1, j, k) * maskCv(i, j, k));
     });
@@ -246,7 +247,7 @@ void set_derived_metrics(const Domain &domain, GridFields &fields) {
     const amrex::Array4<amrex::Real> IdxT = fields.IdxT.array(mfi);
     const amrex::Array4<amrex::Real> IdyT = fields.IdyT.array(mfi);
     const amrex::Array4<amrex::Real> IareaT = fields.IareaT.array(mfi);
-    amrex::ParallelFor(cells, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(cells, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       IdxT(i, j, k) = Adcroft_reciprocal(dxT(i, j, k));
       IdyT(i, j, k) = Adcroft_reciprocal(dyT(i, j, k));
       IareaT(i, j, k) = Adcroft_reciprocal(areaT(i, j, k));
@@ -261,7 +262,7 @@ void set_derived_metrics(const Domain &domain, GridFields &fields) {
     const amrex::Array4<amrex::Real> areaCu = fields.areaCu.array(mfi);
     const amrex::Array4<amrex::Real> IareaCu = fields.IareaCu.array(mfi);
     const amrex::Array4<amrex::Real> IdxCu_OBCmask = fields.IdxCu_OBCmask.array(mfi);
-    amrex::ParallelFor(u_faces, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(u_faces, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       IdxCu(i, j, k) = Adcroft_reciprocal(dxCu(i, j, k));
       // With no open boundaries MOM6's OBCmaskCu is the land/sea mask.
       IdxCu_OBCmask(i, j, k) = maskCu(i, j, k) * IdxCu(i, j, k);
@@ -280,7 +281,7 @@ void set_derived_metrics(const Domain &domain, GridFields &fields) {
     const amrex::Array4<amrex::Real> areaCv = fields.areaCv.array(mfi);
     const amrex::Array4<amrex::Real> IareaCv = fields.IareaCv.array(mfi);
     const amrex::Array4<amrex::Real> IdyCv_OBCmask = fields.IdyCv_OBCmask.array(mfi);
-    amrex::ParallelFor(v_faces, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(v_faces, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       IdxCv(i, j, k) = Adcroft_reciprocal(dxCv(i, j, k));
       IdyCv_OBCmask(i, j, k) = maskCv(i, j, k) * Adcroft_reciprocal(dyCv(i, j, k));
       IdyCv(i, j, k) = Adcroft_reciprocal(dyCv(i, j, k));
@@ -295,7 +296,7 @@ void set_derived_metrics(const Domain &domain, GridFields &fields) {
     const amrex::Array4<amrex::Real> IdyBu = fields.IdyBu.array(mfi);
     const amrex::Array4<amrex::Real> areaBu = fields.areaBu.array(mfi);
     const amrex::Array4<amrex::Real> IareaBu = fields.IareaBu.array(mfi);
-    amrex::ParallelFor(corners, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(corners, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       IdxBu(i, j, k) = Adcroft_reciprocal(dxBu(i, j, k));
       IdyBu(i, j, k) = Adcroft_reciprocal(dyBu(i, j, k));
       // On a spherical grid set_grid_metrics_spherical already sets areaBu

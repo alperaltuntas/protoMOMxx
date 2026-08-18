@@ -1,5 +1,6 @@
 #include <cmath>
 
+#include "MOM_kernel_inline.h"
 #include "MOM_logger.h"
 #include "MOM_surface_forcing.h"
 
@@ -67,7 +68,7 @@ void SurfaceForcing::set_forcing(MechForcing &forces, const amrex::Real time) co
     const amrex::Box bx = mfi.tilebox();
     const amrex::Array4<amrex::Real> taux = forces.taux().array(mfi);
     const amrex::Array4<const amrex::Real> lat = grid_.geoLatCu().const_array(mfi);
-    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+    amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE(int i, int j, int k) MOM_KERNEL_INLINE {
       if (two_gyre) {
         taux(i, j, k) = taux_mag *
             (1.0 - std::cos(2.0 * PI * (lat(i, j, k) - south_lat) / len_lat));
