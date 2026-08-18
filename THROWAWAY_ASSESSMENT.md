@@ -170,8 +170,8 @@ expression boundaries:
 - Everywhere else contraction must stay **on**: a build-wide
   `-ffp-contract=off` moves the fixed initialization *away* from MOM6.
 
-The cost is about 4% of the main loop, which is what disabling contraction in
-the three kernels buys back in rounding fidelity.
+Disabling contraction in the three kernels costs about 2% of the main loop
+(see §4).
 
 This is the least portable thing in the branch, and it should be recorded as a
 cost of the parity requirement rather than hidden. It also gives a design
@@ -255,16 +255,17 @@ now holds everywhere that is testable without MPI.
 ## 4. Performance
 
 44x40x2, 2,880 dynamics steps, one rank, gcc 14.3, MOM6 at its own release
-flags and protoMOMxx at `-O3`:
+flags and protoMOMxx at `-O3`. Fastest of five runs on a shared login node;
+the spread across runs is about 2%, so only the first digit of the ratio
+carries weight:
 
 | | main loop | per step |
 |---|---:|---:|
-| MOM6 | 4.038 s | 1.402 ms |
-| protoMOMxx | 2.362 s | 0.820 ms |
+| MOM6 | 4.040 s | 1.403 ms |
+| protoMOMxx | 2.341 s | 0.813 ms |
 
 Both runs write `ocean.stats` and no other output. protoMOMxx is **1.7x
-faster**, after paying about 4% for the disabled contraction of section 2.
-Read that carefully:
+faster**. Read that carefully:
 
 - MOM6's diagnostics cost only 2.7% here (measured by running with an empty
   `diag_table`), so their absence is not the explanation.
@@ -279,6 +280,23 @@ Read that carefully:
 The honest reading: C++ and AMReX are not a performance liability at this
 scale, and the per-call `MultiFab` allocation in the kernels (see §5) is not
 yet visible in the profile.
+
+The bit-for-bit work of §2 cost about 6% of the main loop, and it is worth
+knowing which half is which:
+
+| change | cost |
+|---|---:|
+| velocity truncation (`vertvisc_limit_vel`) | +4.0% |
+| contraction disabled in three kernels | +2.0% |
+| the `src/types` layering | 0.0% |
+
+The truncation is the larger of the two and is not a parity device at all: it
+is a MOM6 behaviour that was missing, and it costs a full pass over `u` and
+`v` every step in a configuration where it never fires. MOM6 pays the same
+cost. The contraction is the price of the rounding fidelity, and it is smaller
+than it feels like it should be. The layering costs nothing, which is what a
+change that only moves files between archives should cost -- worth measuring
+rather than assuming.
 
 ## 5. Design assessment
 
